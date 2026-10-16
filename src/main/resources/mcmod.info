@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "${modid}",
+    "name": "Pack Organizer",
+    "description": "Search, filter chips and resolution labels for the resource packs screen.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["as9pa"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]

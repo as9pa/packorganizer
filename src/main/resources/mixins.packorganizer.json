@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.7",
+  "package": "io.github.as9pa.packorganizer.mixin",
+  "refmap": "mixins.packorganizer.refmap.json",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "MixinResourcePackRepositoryEntry",
+    "MixinGuiResourcePackList",
+    "MixinGuiScreenResourcePacks",
+    "MixinResourcePackListEntry"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}
