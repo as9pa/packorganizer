@@ -119,6 +119,8 @@ public final class DevShots {
         add(new State("small").window(1200, 700));
         add(new State("hit").hit(10, 1));
         add(new State("crosshair").mouse(900, 160));   // over the sky right of the head at 1920x1057
+        add(new State("ench").enchanted());
+        add(new State("ench-bow").item(HeldItem.BOW).enchanted().hold(20));
     }
 
     private static DevShots instance;
