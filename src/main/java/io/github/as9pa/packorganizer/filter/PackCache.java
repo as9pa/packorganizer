@@ -21,14 +21,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * On-disk memory of scanned pack resolutions, keyed by file name, size and modification time.
+ * On-disk memory of scanned pack resolutions and colors, keyed by file name, size and modification time.
  * Thread-safe; loaded lazily on first use; never throws into the caller.
  */
 public final class PackCache {
-    public static final int FORMAT_VERSION = 4;
+    public static final int FORMAT_VERSION = 5;
 
     private final File file;
-    private final Map<String, PackResolution> entries = new HashMap<>();
+    private final Map<String, Entry> entries = new HashMap<>();
     private boolean loaded;
     private boolean dirty;
 
@@ -40,15 +40,52 @@ public final class PackCache {
         return pack.getName() + ":" + pack.length() + ":" + pack.lastModified();
     }
 
-    public synchronized PackResolution lookup(String key) {
+    /** One pack's cached scan results. */
+    public static final class Entry {
+        public final PackResolution resolution;
+        public final PackColors colors;
+
+        public Entry(PackResolution resolution, PackColors colors) {
+            this.resolution = resolution;
+            this.colors = colors;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Entry)) {
+                return false;
+            }
+            Entry other = (Entry) o;
+            return resolution.equals(other.resolution) && colors.equals(other.colors);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * resolution.hashCode() + colors.hashCode();
+        }
+    }
+
+    public synchronized Entry lookupEntry(String key) {
         ensureLoaded();
         return entries.get(key);
     }
 
+    /** The cached resolution alone, or null on a miss. */
+    public synchronized PackResolution lookup(String key) {
+        Entry e = lookupEntry(key);
+        return e == null ? null : e.resolution;
+    }
+
+    /** Stores a resolution with no colors (neither sword nor armor overridden). */
     public synchronized void put(String key, PackResolution resolution) {
+        put(key, resolution, PackColors.NONE);
+    }
+
+    public synchronized void put(String key, PackResolution resolution, PackColors colors) {
         ensureLoaded();
-        PackResolution previous = entries.put(key, resolution);
-        if (!resolution.equals(previous)) {
+        Entry entry = new Entry(resolution, colors);
+        Entry previous = entries.put(key, entry);
+        if (!entry.equals(previous)) {
             dirty = true;
         }
     }
@@ -68,12 +105,20 @@ public final class PackCache {
             return false;
         }
         JsonObject packs = new JsonObject();
-        for (Map.Entry<String, PackResolution> e : entries.entrySet()) {
+        for (Map.Entry<String, Entry> e : entries.entrySet()) {
+            PackResolution r = e.getValue().resolution;
+            PackColors c = e.getValue().colors;
             JsonObject o = new JsonObject();
-            o.addProperty("res", e.getValue().res);
-            o.addProperty("kind", e.getValue().kind.name());
-            if (e.getValue().stated > 0) {
-                o.addProperty("stated", e.getValue().stated);
+            o.addProperty("res", r.res);
+            o.addProperty("kind", r.kind.name());
+            if (r.stated > 0) {
+                o.addProperty("stated", r.stated);
+            }
+            if (c.sword != null) {
+                o.add("sword", c.sword.toJson());
+            }
+            if (c.armor != null) {
+                o.add("armor", c.armor.toJson());
             }
             packs.add(e.getKey(), o);
         }
@@ -143,9 +188,26 @@ public final class PackCache {
         }
     }
 
-    /** Throws a RuntimeException when the entry is not a resolution the caller can use. */
-    private static PackResolution read(JsonElement element) {
+    /** Throws a RuntimeException when the entry is not one the caller can use. */
+    private static Entry read(JsonElement element) {
         JsonObject o = element.getAsJsonObject();
+        return new Entry(readResolution(o), new PackColors(readFeatures(o, "sword"), readFeatures(o, "armor")));
+    }
+
+    /** Absent means the pack does not override that texture; present but malformed rejects the entry. */
+    private static ColorFeatures readFeatures(JsonObject o, String name) {
+        JsonElement element = o.get(name);
+        if (element == null) {
+            return null;
+        }
+        ColorFeatures f = ColorFeatures.fromJson(element);
+        if (f == null) {
+            throw new IllegalArgumentException("malformed " + name);
+        }
+        return f;
+    }
+
+    private static PackResolution readResolution(JsonObject o) {
         PackResolution.Kind kind = PackResolution.Kind.valueOf(o.get("kind").getAsString());
         if (kind == PackResolution.Kind.TEXTURES) {
             int res = o.get("res").getAsInt();

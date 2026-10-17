@@ -1,6 +1,8 @@
 package io.github.as9pa.packorganizer.mixin;
 
 import io.github.as9pa.packorganizer.EntryExtension;
+import io.github.as9pa.packorganizer.filter.PackColors;
+import io.github.as9pa.packorganizer.filter.PackPaths;
 import io.github.as9pa.packorganizer.filter.PackResolution;
 import io.github.as9pa.packorganizer.filter.PackScan;
 import java.io.File;
@@ -13,14 +15,21 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Gives each pack entry a resolution, filled in by a background scan. */
+/**
+ * Gives each pack entry a resolution, filled in by a background scan, and names nested packs by their path relative to
+ * resourcepacks.
+ */
 @Mixin(ResourcePackRepository.Entry.class)
 public abstract class MixinResourcePackRepositoryEntry implements EntryExtension {
 
     @Shadow @Final private File resourcePackFile;
+    // field_110525_a has no MCP name, so it is the same in dev and at runtime; do not remap it.
+    @Shadow(remap = false) @Final ResourcePackRepository field_110525_a;
 
     @Unique private volatile PackResolution packorganizer$resolution;
+    @Unique private volatile PackColors packorganizer$colors;
 
     /**
      * updateRepositoryEntriesAll() calls updateResourcePack() once for each pack it has not seen before (at startup,
@@ -35,6 +44,39 @@ public abstract class MixinResourcePackRepositoryEntry implements EntryExtension
         PackScan.submit(resourcePackFile, this);
     }
 
+    /**
+     * A nested pack's identity is its path relative to resourcepacks ("pvp/16x/Pack.zip"): options.txt matching, the
+     * list written on Done and the row name all read this. Top-level packs (and anything outside resourcepacks) fall
+     * through to vanilla's file name, so their names never change.
+     */
+    @Inject(method = "getResourcePackName", at = @At("HEAD"), cancellable = true)
+    private void packorganizer$relativeName(CallbackInfoReturnable<String> cir) {
+        File root = field_110525_a.getDirResourcepacks();
+        File parent = resourcePackFile.getAbsoluteFile().getParentFile();
+        if (parent == null || parent.equals(root.getAbsoluteFile())
+                || !resourcePackFile.getAbsolutePath().startsWith(root.getAbsolutePath() + File.separator)) {
+            return;
+        }
+        cir.setReturnValue(PackPaths.relative(root, resourcePackFile));
+    }
+
+    /**
+     * Vanilla equals compares toString(), which is "name:type:mtime" (fastpacks caches the same string), so two nested
+     * packs with the same file name and mtime in different folders would collide. Different files are never equal;
+     * the same file falls through, keeping the mtime check. Stricter than vanilla, so hashCode stays consistent.
+     */
+    @Inject(method = "equals", at = @At("HEAD"), cancellable = true)
+    private void packorganizer$differentFileNotEqual(Object other, CallbackInfoReturnable<Boolean> cir) {
+        if (other instanceof EntryExtension && !resourcePackFile.equals(((EntryExtension) other).packorganizer$file())) {
+            cir.setReturnValue(false);
+        }
+    }
+
+    @Override
+    public File packorganizer$file() {
+        return resourcePackFile;
+    }
+
     @Override
     public void acceptResolution(PackResolution resolution) {
         packorganizer$resolution = resolution;
@@ -43,5 +85,15 @@ public abstract class MixinResourcePackRepositoryEntry implements EntryExtension
     @Override
     public PackResolution packorganizer$resolution() {
         return packorganizer$resolution;
+    }
+
+    @Override
+    public void acceptColors(PackColors colors) {
+        packorganizer$colors = colors;
+    }
+
+    @Override
+    public PackColors packorganizer$colors() {
+        return packorganizer$colors;
     }
 }

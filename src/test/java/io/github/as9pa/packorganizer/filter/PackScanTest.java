@@ -1,6 +1,8 @@
 package io.github.as9pa.packorganizer.filter;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -81,5 +83,32 @@ public class PackScanTest {
     @Test
     public void missingPackReportsUnknown() throws Exception {
         assertEquals(PackResolution.UNKNOWN, await(new File(tmp.getRoot(), "gone.zip")));
+    }
+
+    @Test
+    public void colorsAreDeliveredBeforeTheResolution() throws Exception {
+        Map<String, byte[]> e = new LinkedHashMap<>();
+        e.put("pack.mcmeta", TestPacks.MCMETA);
+        e.put(ColorScanner.SWORD, TestPacks.png(16, 16));
+        File pack = TestPacks.zip(new File(tmp.getRoot(), "sword.zip"), e);
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<PackColors> colors = new AtomicReference<>();
+        final AtomicReference<PackColors> seenAtResolution = new AtomicReference<>();
+        PackScan.submit(pack, new ResolutionSink() {
+            @Override
+            public void acceptResolution(PackResolution resolution) {
+                seenAtResolution.set(colors.get());
+                latch.countDown();
+            }
+
+            @Override
+            public void acceptColors(PackColors c) {
+                colors.set(c);
+            }
+        });
+        assertTrue("result not delivered within 10 s", latch.await(10, TimeUnit.SECONDS));
+        assertNotNull(seenAtResolution.get());
+        assertNotNull("sword texture present", seenAtResolution.get().sword);
+        assertNull("no armor textures", seenAtResolution.get().armor);
     }
 }

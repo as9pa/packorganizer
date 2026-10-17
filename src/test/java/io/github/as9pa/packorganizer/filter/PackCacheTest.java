@@ -2,6 +2,7 @@ package io.github.as9pa.packorganizer.filter;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -143,6 +144,58 @@ public class PackCacheTest {
         PackCache cache = new PackCache(json());
         assertEquals(PackResolution.textures(16), cache.lookup("a.zip:1:1"));
         assertNull(cache.lookup("c.zip:3:3"));
+        assertEquals(1, cache.size());
+    }
+
+    private static ColorFeatures solid(int argb) {
+        return ColorFeatures.from(new int[] {argb, argb, argb, argb});
+    }
+
+    @Test
+    public void colorsRoundTripThroughTheFile() {
+        PackCache cache = new PackCache(json());
+        PackColors both = new PackColors(solid(0xFFFF0000), solid(0xFF00FFFF));
+        PackColors swordOnly = new PackColors(solid(0xFF000000), null);
+        cache.put("a.zip:1:1", PackResolution.textures(16), both);
+        cache.put("b.zip:2:2", PackResolution.OVERLAY, swordOnly);
+        cache.put("c.zip:3:3", PackResolution.UNKNOWN);
+        assertTrue(cache.flush());
+
+        PackCache reloaded = new PackCache(json());
+        PackCache.Entry a = reloaded.lookupEntry("a.zip:1:1");
+        assertNotNull(a);
+        assertEquals(PackResolution.textures(16), a.resolution);
+        assertEquals(both, a.colors);
+        assertEquals(swordOnly, reloaded.lookupEntry("b.zip:2:2").colors);
+        assertNull(reloaded.lookupEntry("b.zip:2:2").colors.armor);
+        assertEquals(PackColors.NONE, reloaded.lookupEntry("c.zip:3:3").colors);
+    }
+
+    @Test
+    public void changedColorsMarkDirty() {
+        PackCache cache = new PackCache(json());
+        cache.put("a.zip:1:1", PackResolution.textures(16), new PackColors(solid(0xFFFF0000), null));
+        assertTrue(cache.flush());
+        cache.put("a.zip:1:1", PackResolution.textures(16), new PackColors(solid(0xFFFF0000), null));
+        assertFalse("same colors are not a change", cache.isDirty());
+        cache.put("a.zip:1:1", PackResolution.textures(16), new PackColors(solid(0xFF0000FF), null));
+        assertTrue(cache.isDirty());
+    }
+
+    @Test
+    public void version4FileIsIgnored() throws IOException {
+        TestPacks.write(json(), "{\"version\":4,\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"}}}".getBytes("UTF-8"));
+        assertEquals(5, PackCache.FORMAT_VERSION);
+        assertNull(new PackCache(json()).lookup("a.zip:1:1"));
+    }
+
+    @Test
+    public void malformedColorsSkipOnlyThatEntry() throws IOException {
+        TestPacks.write(json(), ("{\"version\":" + PackCache.FORMAT_VERSION + ",\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"},"
+                + "\"b.zip:2:2\":{\"res\":16,\"kind\":\"TEXTURES\",\"sword\":\"red\"}}}").getBytes("UTF-8"));
+        PackCache cache = new PackCache(json());
+        assertEquals(PackResolution.textures(16), cache.lookup("a.zip:1:1"));
+        assertNull(cache.lookup("b.zip:2:2"));
         assertEquals(1, cache.size());
     }
 }

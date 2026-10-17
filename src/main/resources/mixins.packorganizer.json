@@ -5,10 +5,13 @@
   "refmap": "mixins.packorganizer.refmap.json",
   "compatibilityLevel": "JAVA_8",
   "client": [
+    "MixinResourcePackRepository",
     "MixinResourcePackRepositoryEntry",
+    "MixinResourcePackListEntryFound",
     "MixinGuiResourcePackList",
     "MixinGuiScreenResourcePacks",
-    "MixinResourcePackListEntry"
+    "MixinResourcePackListEntry",
+    "MixinGuiSlot"
   ],
   "injectors": { "defaultRequire": 1 }
 }

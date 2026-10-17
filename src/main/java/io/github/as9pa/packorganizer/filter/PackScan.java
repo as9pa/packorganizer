@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Queues one resolution scan per pack on a small background pool: cache hit, or scan then write-through.
+ * Queues one resolution and color scan per pack on a small background pool: cache hit, or scan then write-through.
  * The cache file is flushed by a task queued behind the scans, so a cold start writes it a few times at most.
  */
 public final class PackScan {
@@ -41,18 +41,26 @@ public final class PackScan {
             @Override
             public void run() {
                 PackResolution r;
+                PackColors colors;
                 try {
                     String key = PackCache.key(pack);
-                    r = c.lookup(key);
-                    if (r == null) {
+                    PackCache.Entry hit = c.lookupEntry(key);
+                    if (hit != null) {
+                        r = hit.resolution;
+                        colors = hit.colors;
+                    } else {
                         r = ResolutionScanner.scan(pack);
-                        c.put(key, r);
+                        colors = ColorScanner.scan(pack);
+                        c.put(key, r, colors);
                         scheduleFlush(c);
                     }
                 } catch (RuntimeException e) {
                     Log.LOG.debug("packorganizer: scan failed for {}: {}", pack.getName(), e.toString());
                     r = PackResolution.UNKNOWN;
+                    colors = PackColors.NONE;
                 }
+                // Colors first: a non-null resolution is what tells readers the scan has finished.
+                sink.acceptColors(colors);
                 sink.acceptResolution(r);
             }
         });
