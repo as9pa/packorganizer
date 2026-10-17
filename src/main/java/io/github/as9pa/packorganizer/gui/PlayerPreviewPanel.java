@@ -148,6 +148,7 @@ public final class PlayerPreviewPanel extends Gui {
     private int debugMouseX;
     private int debugMouseY;
     private float debugSpin;
+    private long debugSkyStart;
 
     public PlayerPreviewPanel(GuiScreen screen) {
         this.mc = screen.mc != null ? screen.mc : Minecraft.getMinecraft();
@@ -334,7 +335,7 @@ public final class PlayerPreviewPanel extends Gui {
                 GlStateManager.clear(GL11.GL_DEPTH_BUFFER_BIT);
             }
             Settings settings = PackOrganizer.settings();
-            SkyBackdrop.draw(shown, viewX, viewY, viewW, viewH, Minecraft.getSystemTime() - startMs, settings.skyCycle);
+            SkyBackdrop.draw(shown, viewX, viewY, viewW, viewH, Minecraft.getSystemTime() - (debug ? debugSkyStart : startMs), settings.skyCycle);
             if (shown != null) {
                 renderer.render(shown, pose, skin(settings), centerX, feetY, block);
             }
@@ -597,6 +598,7 @@ public final class PlayerPreviewPanel extends Gui {
         debugMouseX = mouseX;
         debugMouseY = mouseY;
         debugSpin = spinDeg;
+        debugSkyStart = Minecraft.getSystemTime();   // each state's sky starts turning from the mock's t=0
     }
 
     /** DevShots only: holds the item as if its button was clicked. */
