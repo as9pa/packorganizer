@@ -128,7 +128,7 @@ public final class DevShots {
         add(new State("use-effects").item(HeldItem.GOLDEN_APPLE).hold(70));
         add(new State("use-splash").item(HeldItem.SPLASH_POTION).mouse(822, 500).use(1, 20));
         add(new State("use-rod").item(HeldItem.FISHING_ROD).mouse(770, 320).use(1, 49));
-        add(new State("crosshair").mouse(900, 160));   // over the sky right of the head at 1920x1057
+        add(new State("crosshair").mouse(842, 187));   // just right of the head at 1920x1057, as in the mock
         add(new State("ench").enchanted());
         add(new State("ench-bow").item(HeldItem.BOW).enchanted().hold(20));
     }

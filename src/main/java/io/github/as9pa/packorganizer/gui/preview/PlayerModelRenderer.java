@@ -49,6 +49,8 @@ public final class PlayerModelRenderer {
     /** LayerBipedArmor's models: layer_1 for helmet, chestplate and boots, layer_2 for leggings. */
     private final ModelBiped armor = new ModelBiped(1.0F);
     private final ModelBiped leggings = new ModelBiped(0.5F);
+    /** The hurt tint alpha of the frame being drawn, 0 when not hurt. */
+    private float tint;
 
     private final FloatBuffer matrix = BufferUtils.createFloatBuffer(16);
     private final FloatBuffer hurtColor = BufferUtils.createFloatBuffer(4);
@@ -137,8 +139,9 @@ public final class PlayerModelRenderer {
         setAngles(leggings, pose);
 
         boolean hurt = pose.hurt > 0F;
+        tint = hurt ? Math.min(pose.hurt, 1F) : 0F;
         if (hurt) {
-            hurtTint(Math.min(pose.hurt, 1F));
+            hurtTint(tint);
         }
         if (skin != null) {
             GlStateManager.bindTexture(skin.skin);
@@ -319,11 +322,18 @@ public final class PlayerModelRenderer {
             }
         }
         if (glint && drawn) {
+            // The hurt tint would turn the additive glint pink over the whole piece; the glint stays purple.
+            if (tint > 0F) {
+                clearTint();
+            }
             Glint.armor(() -> {
                 for (ModelRenderer part : parts) {
                     part.render(PX);
                 }
             }, pack.texture(ModelSpec.GLINT), ticks);
+            if (tint > 0F) {
+                hurtTint(tint);
+            }
         }
     }
 
