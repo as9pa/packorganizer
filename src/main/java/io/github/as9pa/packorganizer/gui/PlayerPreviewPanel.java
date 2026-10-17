@@ -495,7 +495,13 @@ public final class PlayerPreviewPanel extends Gui {
         pose.armor = settings.previewArmor;
         pose.item = item;
         pose.enchanted = settings.previewEnchanted;
+        pose.glintMs = glintMs();
         pose.ticks = ticks + partial;
+    }
+
+    /** ms since the panel opened; DevShots holds it at 0 like the mock's frozen shots, to compare the bands. */
+    private long glintMs() {
+        return debug ? 0L : Minecraft.getSystemTime() - startMs;
     }
 
     private static SkinTextures skin(Settings settings) {
@@ -630,7 +636,7 @@ public final class PlayerPreviewPanel extends Gui {
             }
         }
         GlStateManager.colorMask(true, true, true, true);
-        Glint.item(() -> quad(x0, y0, x1, y1, z, uv), glint, Minecraft.getSystemTime());
+        Glint.item(() -> quad(x0, y0, x1, y1, z, uv), glint, glintMs());
         GlStateManager.alphaFunc(alphaFunc, alphaRef);
         if (!alphaTest) {
             GlStateManager.disableAlpha();

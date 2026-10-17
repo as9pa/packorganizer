@@ -9,7 +9,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.ModelBase;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.model.ModelBox;
@@ -89,6 +88,8 @@ public final class PlayerModelRenderer {
         public HeldItem item = HeldItem.SWORD;
         /** Glint on sword, bow and armor; drawn by the glint passes, not here. */
         public boolean enchanted;
+        /** The glint clock in ms; the armor glint runs on it in ticks (ms / 50), as the mock's. */
+        public long glintMs;
         /** Age in ticks with the partial tick, for the vanilla idle arm sway. */
         public float ticks;
     }
@@ -144,7 +145,7 @@ public final class PlayerModelRenderer {
             renderSkin(model);
         }
         if (pose.armor != null && ModelSpec.MATERIALS.contains(pose.armor)) {
-            renderArmor(pack, pose.armor, pose.enchanted, pose.ticks);
+            renderArmor(pack, pose.armor, pose.enchanted, pose.glintMs / 50F);
         }
         if (hurt) {
             clearTint();
@@ -397,7 +398,7 @@ public final class PlayerModelRenderer {
         boolean drawn = drawItem(pack, path);
         if (drawn && pose.enchanted && (pose.item == HeldItem.SWORD || pose.item == HeldItem.BOW)) {
             int list = pack.itemList(path);
-            Glint.item(() -> GlStateManager.callList(list), pack.texture(ModelSpec.GLINT), Minecraft.getSystemTime());
+            Glint.item(() -> GlStateManager.callList(list), pack.texture(ModelSpec.GLINT), pose.glintMs);
         }
         if (pose.item == HeldItem.FISHING_ROD) {
             float[] tip = tip(pack.image(path));
