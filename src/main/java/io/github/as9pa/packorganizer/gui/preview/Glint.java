@@ -10,7 +10,8 @@ import org.lwjgl.opengl.GL14;
  * Vanilla's enchantment glint as extra passes over geometry that was just drawn: RenderItem.renderEffect for items
  * and LayerArmorBase.renderGlint for armor. Each pass redraws the geometry with the glint texture through a texture
  * matrix, with depth {@code GL_EQUAL} so only the pixels the geometry wrote change, no depth write, no lighting and
- * additive {@code GL_SRC_COLOR, GL_ONE} blending. The geometry must not bind textures or set the color. Every piece of
+ * additive {@code GL_SRC_COLOR, GL_ONE} blending. The geometry must not bind textures or set the color, and runs with
+ * the modelview matrix current. Every piece of
  * state changed here is read back from GL first and put back afterwards. Client thread only.
  */
 public final class Glint {
@@ -41,13 +42,13 @@ public final class Glint {
         float[] turn = {-50F, 10F};
         for (int i = 0; i < 2; i++) {
             GlStateManager.color(ITEM_COLOR[0], ITEM_COLOR[1], ITEM_COLOR[2], 1F);
+            GlStateManager.matrixMode(GL11.GL_TEXTURE);
             GlStateManager.pushMatrix();
             GlStateManager.scale(8F, 8F, 8F);
             GlStateManager.translate(slide[i], 0F, 0F);
             GlStateManager.rotate(turn[i], 0F, 0F, 1F);
             GlStateManager.scale(SPRITE, SPRITE, 1F);
-            drawGeometry.run();
-            GlStateManager.popMatrix();
+            draw(drawGeometry);
         }
         end(saved);
     }
@@ -63,13 +64,13 @@ public final class Glint {
         Saved saved = begin(glintTex);
         for (int i = 0; i < 2; i++) {
             GlStateManager.color(ARMOR_COLOR[0], ARMOR_COLOR[1], ARMOR_COLOR[2], 1F);
+            GlStateManager.matrixMode(GL11.GL_TEXTURE);
             GlStateManager.pushMatrix();
             GlStateManager.loadIdentity();
             GlStateManager.scale(1F / 3F, 1F / 3F, 1F / 3F);
             GlStateManager.rotate(30F - i * 60F, 0F, 0F, 1F);
             GlStateManager.translate(0F, ticks * (0.001F + i * 0.003F) * 20F, 0F);
-            drawGeometry.run();
-            GlStateManager.popMatrix();
+            draw(drawGeometry);
         }
         end(saved);
     }
@@ -100,8 +101,19 @@ public final class Glint {
         // The vanilla glint's mcmeta asks for blur; the texture is only ever drawn here.
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-        GlStateManager.matrixMode(GL11.GL_TEXTURE);
         return s;
+    }
+
+    /**
+     * Runs the geometry with the modelview matrix current, as LayerArmorBase.renderGlint does: ModelRenderer.render
+     * translates and rotates whatever matrix is current, so with the texture matrix current every turned or moved
+     * part would land somewhere else and fail {@code GL_EQUAL}. Pops the pass's texture matrix afterwards.
+     */
+    private static void draw(Runnable drawGeometry) {
+        GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+        drawGeometry.run();
+        GlStateManager.matrixMode(GL11.GL_TEXTURE);
+        GlStateManager.popMatrix();
     }
 
     private static void end(Saved s) {
