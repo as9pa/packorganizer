@@ -7,6 +7,7 @@ import io.github.as9pa.packorganizer.Settings;
 import io.github.as9pa.packorganizer.filter.ModelSpec;
 import io.github.as9pa.packorganizer.filter.PackPaths;
 import io.github.as9pa.packorganizer.gui.preview.DevShots;
+import io.github.as9pa.packorganizer.gui.preview.Glint;
 import io.github.as9pa.packorganizer.gui.preview.HeadFollow;
 import io.github.as9pa.packorganizer.gui.preview.HeldItem;
 import io.github.as9pa.packorganizer.gui.preview.ModelHitTest;
@@ -583,6 +584,54 @@ public final class PlayerPreviewPanel extends Gui {
         if (over != null) {
             layer(pack.texture(over), x0, y0, x1, y1, uv);
         }
+        // The book always glints, as vanilla's enchanted book; the sword, bow and helmets only with Enchanted on.
+        HeldItem held = b.kind == Kind.ITEM ? HeldItem.fromId(b.id) : null;
+        if (b.kind == Kind.ENCHANTED || PackOrganizer.settings().previewEnchanted
+                && (b.kind == Kind.ARMOR || held == HeldItem.SWORD || held == HeldItem.BOW)) {
+            glintIcon(pack, x0, y0, x1, y1, uv, pack.texture(path), over == null ? 0 : pack.texture(over));
+        }
+    }
+
+    /**
+     * RenderItem.renderEffect on an icon: the opaque texels of its layers are written to depth only (colors masked,
+     * vanilla's 0.1 alpha cutout) at a z just behind the GUI's, so the glint's GL_EQUAL lands on them alone and
+     * nothing drawn later at the GUI's z is hidden. Depth and alpha test state go back as found.
+     */
+    private void glintIcon(PackModel pack, float x0, float y0, float x1, float y1, float[] uv, int... layers) {
+        int glint = pack.texture(ModelSpec.GLINT);
+        if (glint == 0) {
+            return;
+        }
+        float z = zLevel - 1F;
+        boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        int depthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
+        boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+        boolean alphaTest = GL11.glIsEnabled(GL11.GL_ALPHA_TEST);
+        int alphaFunc = GL11.glGetInteger(GL11.GL_ALPHA_TEST_FUNC);
+        float alphaRef = GL11.glGetFloat(GL11.GL_ALPHA_TEST_REF);
+        GlStateManager.enableDepth();
+        GlStateManager.depthFunc(GL11.GL_ALWAYS);
+        GlStateManager.depthMask(true);
+        GlStateManager.enableAlpha();
+        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
+        GlStateManager.colorMask(false, false, false, false);
+        for (int texture : layers) {
+            if (texture != 0) {
+                GlStateManager.bindTexture(texture);
+                quad(x0, y0, x1, y1, z, uv);
+            }
+        }
+        GlStateManager.colorMask(true, true, true, true);
+        Glint.item(() -> quad(x0, y0, x1, y1, z, uv), glint, Minecraft.getSystemTime());
+        GlStateManager.alphaFunc(alphaFunc, alphaRef);
+        if (!alphaTest) {
+            GlStateManager.disableAlpha();
+        }
+        GlStateManager.depthMask(depthMask);
+        GlStateManager.depthFunc(depthFunc);
+        if (!depthTest) {
+            GlStateManager.disableDepth();
+        }
     }
 
     /** The texture the button shows for an item; the sword follows the armor. */
@@ -650,13 +699,17 @@ public final class PlayerPreviewPanel extends Gui {
             return;
         }
         GlStateManager.bindTexture(texture);
+        quad(x0, y0, x1, y1, zLevel, uv);
+    }
+
+    private static void quad(float x0, float y0, float x1, float y1, float z, float[] uv) {
         Tessellator tessellator = Tessellator.getInstance();
         WorldRenderer wr = tessellator.getWorldRenderer();
         wr.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-        wr.pos(x0, y1, zLevel).tex(uv[0], uv[3]).endVertex();
-        wr.pos(x1, y1, zLevel).tex(uv[2], uv[3]).endVertex();
-        wr.pos(x1, y0, zLevel).tex(uv[2], uv[1]).endVertex();
-        wr.pos(x0, y0, zLevel).tex(uv[0], uv[1]).endVertex();
+        wr.pos(x0, y1, z).tex(uv[0], uv[3]).endVertex();
+        wr.pos(x1, y1, z).tex(uv[2], uv[3]).endVertex();
+        wr.pos(x1, y0, z).tex(uv[2], uv[1]).endVertex();
+        wr.pos(x0, y0, z).tex(uv[0], uv[1]).endVertex();
         tessellator.draw();
     }
 

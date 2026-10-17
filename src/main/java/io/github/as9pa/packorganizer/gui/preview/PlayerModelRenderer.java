@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.ModelBase;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.model.ModelBox;
@@ -143,7 +144,7 @@ public final class PlayerModelRenderer {
             renderSkin(model);
         }
         if (pose.armor != null && ModelSpec.MATERIALS.contains(pose.armor)) {
-            renderArmor(pack, pose.armor);
+            renderArmor(pack, pose.armor, pose.enchanted, pose.ticks);
         }
         if (hurt) {
             clearTint();
@@ -280,25 +281,31 @@ public final class PlayerModelRenderer {
         renderPart(m.bipedBodyWear, 0.25F);
     }
 
-    /** LayerArmorBase: helmet, chestplate, leggings, boots, with LayerBipedArmor's parts per slot. */
-    private void renderArmor(PackModel pack, String material) {
-        renderArmorPiece(pack, material, armor, 1, armor.bipedHead, armor.bipedHeadwear);
-        renderArmorPiece(pack, material, armor, 1, armor.bipedBody, armor.bipedRightArm, armor.bipedLeftArm);
-        renderArmorPiece(pack, material, leggings, 2, leggings.bipedBody, leggings.bipedRightLeg,
+    /**
+     * LayerArmorBase: helmet, chestplate, leggings, boots, with LayerBipedArmor's parts per slot; {@code glint} adds
+     * each slot's glint at {@code ticks}.
+     */
+    private void renderArmor(PackModel pack, String material, boolean glint, float ticks) {
+        renderArmorPiece(pack, material, glint, ticks, armor, 1, armor.bipedHead, armor.bipedHeadwear);
+        renderArmorPiece(pack, material, glint, ticks, armor, 1, armor.bipedBody, armor.bipedRightArm,
+                armor.bipedLeftArm);
+        renderArmorPiece(pack, material, glint, ticks, leggings, 2, leggings.bipedBody, leggings.bipedRightLeg,
                 leggings.bipedLeftLeg);
-        renderArmorPiece(pack, material, armor, 1, armor.bipedRightLeg, armor.bipedLeftLeg);
+        renderArmorPiece(pack, material, glint, ticks, armor, 1, armor.bipedRightLeg, armor.bipedLeftLeg);
     }
 
-    /** One slot; leather gets its untinted overlay drawn over the tinted base, as vanilla. */
-    private void renderArmorPiece(PackModel pack, String material, ModelBiped model, int layer,
-                                  ModelRenderer... parts) {
+    /** One slot; leather gets its untinted overlay drawn over the tinted base, then the glint, as vanilla. */
+    private void renderArmorPiece(PackModel pack, String material, boolean glint, float ticks, ModelBiped model,
+                                  int layer, ModelRenderer... parts) {
         float inflate = model == armor ? 1.0F : 0.5F;
+        boolean drawn = false;
         int base = pack.texture(ModelSpec.armor(material, layer));
         if (base != 0) {
             GlStateManager.bindTexture(base);
             for (ModelRenderer part : parts) {
                 renderPart(part, part == model.bipedHeadwear ? inflate + 0.5F : inflate);
             }
+            drawn = true;
         }
         if ("leather".equals(material)) {
             int overlay = pack.texture(ModelSpec.armorOverlay(layer));
@@ -307,7 +314,15 @@ public final class PlayerModelRenderer {
                 for (ModelRenderer part : parts) {
                     part.render(PX);
                 }
+                drawn = true;
             }
+        }
+        if (glint && drawn) {
+            Glint.armor(() -> {
+                for (ModelRenderer part : parts) {
+                    part.render(PX);
+                }
+            }, pack.texture(ModelSpec.GLINT), ticks);
         }
     }
 
@@ -379,7 +394,11 @@ public final class PlayerModelRenderer {
             drawItem(pack, under);
             GlStateManager.color(1F, 1F, 1F, 1F);
         }
-        drawItem(pack, path);
+        boolean drawn = drawItem(pack, path);
+        if (drawn && pose.enchanted && (pose.item == HeldItem.SWORD || pose.item == HeldItem.BOW)) {
+            int list = pack.itemList(path);
+            Glint.item(() -> GlStateManager.callList(list), pack.texture(ModelSpec.GLINT), Minecraft.getSystemTime());
+        }
         if (pose.item == HeldItem.FISHING_ROD) {
             float[] tip = tip(pack.image(path));
             float[] at = new float[3];
@@ -390,13 +409,16 @@ public final class PlayerModelRenderer {
         GlStateManager.popMatrix();
     }
 
-    private static void drawItem(PackModel pack, String path) {
+    /** False when the texture or its mesh is missing and nothing was drawn. */
+    private static boolean drawItem(PackModel pack, String path) {
         int texture = pack.texture(path);
         int list = pack.itemList(path);
         if (texture != 0 && list > 0) {
             GlStateManager.bindTexture(texture);
             GlStateManager.callList(list);
+            return true;
         }
+        return false;
     }
 
     /**
