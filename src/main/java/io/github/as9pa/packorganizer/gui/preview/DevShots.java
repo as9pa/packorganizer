@@ -68,6 +68,8 @@ public final class DevShots {
         boolean enchanted;
         boolean sky = true;
         float spin;
+        /** GUI x, y the head follows (and the crosshair sits at over the view); null is the {@code mouse} key. */
+        int[] mouse;
         boolean press;
         int releaseTick = -1;
         int hitTick = -1;
@@ -84,6 +86,7 @@ public final class DevShots {
         State enchanted() { enchanted = true; return this; }
         State skyOff() { sky = false; return this; }
         State spin(float deg) { spin = deg; return this; }
+        State mouse(int x, int y) { mouse = new int[] {x, y}; return this; }
         /** Right button held from tick 0; the shot comes after {@code ticks} with it still held. */
         State hold(int ticks) { press = true; shotTick = Math.max(shotTick, ticks); return this; }
         /** Right button down at 0, up at {@code ticks}; the shot comes {@code after} ticks later. */
@@ -114,6 +117,8 @@ public final class DevShots {
         add(new State("skyoff").skyOff());
         add(new State("idle").idle());
         add(new State("small").window(1200, 700));
+        add(new State("hit").hit(10, 1));
+        add(new State("crosshair").mouse(900, 160));   // over the sky right of the head at 1920x1057
     }
 
     private static DevShots instance;
@@ -314,7 +319,9 @@ public final class DevShots {
         panel.debugUse(false);
         panel.debugItem(s.item);
         panel.debugEnchanted(s.enchanted);
-        panel.debugOverride(s.forcePack && packFile != null, packFile, packName, mouseX, mouseY, s.spin);
+        int mx = s.mouse != null ? s.mouse[0] : mouseX;
+        int my = s.mouse != null ? s.mouse[1] : mouseY;
+        panel.debugOverride(s.forcePack && packFile != null, packFile, packName, mx, my, s.spin);
         if (s.press) {
             panel.debugUse(true);
         }

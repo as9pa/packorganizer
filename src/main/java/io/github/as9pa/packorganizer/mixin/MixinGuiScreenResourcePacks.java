@@ -146,15 +146,26 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
 
     /**
      * Focuses the search box; a click the color panel or the player preview's buttons take never reaches the lists
-     * or buttons.
+     * or buttons. A right press anywhere uses the preview's held item and still goes on to vanilla.
      */
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void packorganizer$focusSearch(int mouseX, int mouseY, int mouseButton, CallbackInfo ci) {
+        if (mouseButton == 1 && packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.rightPressed();
+        }
         if (packorganizer$toolbar != null && packorganizer$toolbar.mouseClicked(mouseX, mouseY, mouseButton)) {
             ci.cancel();
         } else if (packorganizer$playerPreview != null
                 && packorganizer$playerPreview.mouseClicked(mouseX, mouseY, mouseButton)) {
             ci.cancel();
+        }
+    }
+
+    /** GuiScreenResourcePacks declares mouseReleased itself, so hook it rather than override: ends a spin, click or use. */
+    @Inject(method = "mouseReleased", at = @At("HEAD"))
+    private void packorganizer$mouseReleased(int mouseX, int mouseY, int state, CallbackInfo ci) {
+        if (packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.mouseReleased(state);
         }
     }
 
@@ -190,6 +201,9 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
         if (packorganizer$toolbar != null) {
             packorganizer$toolbar.mouseDragged(mouseX, mouseY);
+        }
+        if (packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.mouseDragged(clickedMouseButton);
         }
     }
 

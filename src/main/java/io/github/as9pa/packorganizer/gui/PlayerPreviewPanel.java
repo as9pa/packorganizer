@@ -9,6 +9,7 @@ import io.github.as9pa.packorganizer.filter.PackPaths;
 import io.github.as9pa.packorganizer.gui.preview.DevShots;
 import io.github.as9pa.packorganizer.gui.preview.HeadFollow;
 import io.github.as9pa.packorganizer.gui.preview.HeldItem;
+import io.github.as9pa.packorganizer.gui.preview.ModelHitTest;
 import io.github.as9pa.packorganizer.gui.preview.PackModel;
 import io.github.as9pa.packorganizer.gui.preview.PlayerModelRenderer;
 import io.github.as9pa.packorganizer.gui.preview.PreviewFramebuffer;
@@ -40,6 +41,10 @@ import net.minecraft.client.resources.ResourcePackListEntry;
 import net.minecraft.client.resources.ResourcePackListEntryFound;
 import net.minecraft.client.resources.ResourcePackRepository;
 import net.minecraft.util.ResourceLocation;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.LWJGLException;
+import org.lwjgl.input.Cursor;
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 /**
@@ -77,6 +82,12 @@ public final class PlayerPreviewPanel extends Gui {
     private static final int SPLASH_TINT = 0xF82423;
     /** With nothing hovered, the last hovered pack stays this long so the mouse can cross into the panel. */
     private static final long HOVER_GRACE_MS = 300;
+    private static final float SPIN_PER_PX = 1.5F;
+    /** A left press in the view that moves more than this (screen px) becomes a spin instead of a click. */
+    private static final int SPIN_START_PX = 3;
+    /** GuiIngame's crosshair, icons.png (0,0,16,16), drawn this far up-left of the pointer. */
+    private static final int CROSSHAIR = 16;
+    private static final int CROSSHAIR_OFFSET = 7;
 
     private enum Kind { ARMOR, ENCHANTED, ITEM }
 
@@ -97,6 +108,9 @@ public final class PlayerPreviewPanel extends Gui {
     private static boolean hoverOffered;
     private static File hoverFile;
     private static String hoverName;
+    /** Shown instead of the system cursor over the view; made once, null until then or where unsupported. */
+    private static Cursor emptyCursor;
+    private static boolean cursorFailed;
 
     private final Minecraft mc;
     private final PlayerModelRenderer renderer = new PlayerModelRenderer();
@@ -139,6 +153,14 @@ public final class PlayerPreviewPanel extends Gui {
     private boolean failed;
     /** True when {@link #shown} is the model for this frame's pack, not one kept while it loads. */
     private boolean shownCurrent;
+    private int screenWidth = 1;
+    private int screenHeight = 1;
+    /** A left press in the view waiting for release, or turned into a spin once it moved far enough. */
+    private boolean pressed;
+    private int pressRawX;
+    private int pressRawY;
+    private float lastDragX;
+    private boolean cursorHidden;
 
     // DevShots only: a forced pack (none forced is nothing hovered), mouse and spin; never set in a normal install.
     private boolean debug;
@@ -188,6 +210,8 @@ public final class PlayerPreviewPanel extends Gui {
     }
 
     public void layout(int screenWidth, int screenHeight) {
+        this.screenWidth = Math.max(1, screenWidth);
+        this.screenHeight = Math.max(1, screenHeight);
         wide = screenWidth >= MIN_SCREEN_WIDTH;
         x = screenWidth / 2 + LEFT_FROM_CENTER;
         y = PacksToolbar.TOOLBAR_Y;
@@ -236,6 +260,7 @@ public final class PlayerPreviewPanel extends Gui {
 
     public void draw(int mouseX, int mouseY, float partial) {
         if (!visible()) {
+            hideCursor(false);
             return;
         }
         if (debug) {
@@ -264,6 +289,73 @@ public final class PlayerPreviewPanel extends Gui {
             // Centered on the bottom button row like the title on the top one.
             font.drawStringWithShadow(font.trimStringToWidth(shownName, nameWidth), x + EDGE, y + height - 18, 0xFFFFFF);
         }
+        // Over the view (not a button), or while spinning, the pack's crosshair stands in for the cursor.
+        boolean crosshair = shown != null && (spin.dragging() || (inView(mouseX, mouseY) && buttonAt(mouseX, mouseY) == null));
+        if (!debug) {
+            hideCursor(crosshair);
+        }
+        if (crosshair) {
+            drawCrosshair(mouseX, mouseY);
+        }
+    }
+
+    private boolean inView(int mouseX, int mouseY) {
+        return mouseX >= viewX && mouseX < viewX + viewW && mouseY >= viewY && mouseY < viewY + viewH;
+    }
+
+    /** GuiIngame's crosshair: inverts what is under it, texels under alpha 0.1 are dropped. */
+    private void drawCrosshair(int mouseX, int mouseY) {
+        int texture = shown.texture(ModelSpec.ICONS);
+        if (texture == 0) {
+            return;
+        }
+        boolean depth = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        GlStateManager.disableDepth();   // the unmultisampled model leaves its depth in front of z 0
+        GlStateManager.bindTexture(texture);
+        GlStateManager.color(1F, 1F, 1F, 1F);
+        GlStateManager.enableTexture2D();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(775, 769, 1, 0);
+        GlStateManager.enableAlpha();
+        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
+        Gui.drawModalRectWithCustomSizedTexture(mouseX - CROSSHAIR_OFFSET, mouseY - CROSSHAIR_OFFSET, 0, 0,
+                CROSSHAIR, CROSSHAIR, 256, 256);
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+        if (depth) {
+            GlStateManager.enableDepth();
+        }
+    }
+
+    /** Hides the system cursor for the crosshair or brings it back; without native cursor support it stays. */
+    private void hideCursor(boolean hide) {
+        if (hide == cursorHidden || (hide && cursorFailed)) {
+            return;
+        }
+        try {
+            if (hide) {
+                Cursor empty = emptyCursor();
+                if (empty == null) {
+                    return;
+                }
+                Mouse.setNativeCursor(empty);
+            } else {
+                Mouse.setNativeCursor(null);
+            }
+            cursorHidden = hide;
+        } catch (LWJGLException | RuntimeException e) {
+            if (!cursorFailed) {
+                cursorFailed = true;
+                Log.LOG.warn("Player preview could not change the mouse cursor", e);
+            }
+        }
+    }
+
+    /** An empty 1x1 native cursor, made on first use; null where transparent native cursors are not supported. */
+    private static Cursor emptyCursor() throws LWJGLException {
+        if (emptyCursor == null && (Cursor.getCapabilities() & Cursor.CURSOR_ONE_BIT_TRANSPARENCY) != 0) {
+            emptyCursor = new Cursor(1, 1, 0, 0, 1, BufferUtils.createIntBuffer(1), null);
+        }
+        return emptyCursor;
     }
 
     /** Hovered pack, else the last hovered while the mouse is over the panel (or just left a row), else the top on. */
@@ -350,6 +442,8 @@ public final class PlayerPreviewPanel extends Gui {
         }
         spin.step(seconds);
         updatePose(partial);
+        // Projectiles leave along the eased head direction, turned with the spin (yaw 0 faces +z).
+        sim.setAim((float) Math.toRadians(pose.spin - pose.headYaw), (float) Math.toRadians(pose.pitch));
 
         boolean multisampled = framebuffer.begin(viewX, viewY, viewW, viewH);
         try {
@@ -575,15 +669,29 @@ public final class PlayerPreviewPanel extends Gui {
         return null;
     }
 
-    /** A left click on a panel button picks the armor, item or Enchanted; true when the panel took the click. */
+    /**
+     * A left click on a panel button picks the armor, item or Enchanted; true when the panel took the click. A press
+     * in the view waits for release (a click, or a spin once it moves), and anywhere else it swings the arm.
+     */
     public boolean mouseClicked(int mouseX, int mouseY, int mouseButton) {
         if (!visible() || mouseButton != 0) {
             return false;
         }
+        spin.release(System.nanoTime());   // a release lost outside the window ends the old spin
         Button b = buttonAt(mouseX, mouseY);
         if (b == null) {
+            if (inView(mouseX, mouseY)) {
+                pressed = true;
+                pressRawX = Mouse.getEventX();
+                pressRawY = Mouse.getEventY();
+                lastDragX = guiX(pressRawX);
+            } else {
+                pressed = false;
+                sim.leftClick(false);
+            }
             return false;
         }
+        pressed = false;
         mc.getSoundHandler().playSound(PositionedSoundRecord.create(new ResourceLocation("gui.button.press"), 1.0F));
         Settings settings = PackOrganizer.settings();
         switch (b.kind) {
@@ -602,6 +710,72 @@ public final class PlayerPreviewPanel extends Gui {
         }
         // Written to disk with the rest of the settings when the screen closes.
         return true;
+    }
+
+    /** The right button went down anywhere on the screen: use the held item. */
+    public void rightPressed() {
+        if (visible()) {
+            sim.rightPress();
+        }
+    }
+
+    /**
+     * The mouse moved with a button held (during GuiScreen's mouse event): a left press in the view that moves more
+     * than {@link #SPIN_START_PX} turns into a spin at {@link #SPIN_PER_PX} degrees per GUI px.
+     */
+    public void mouseDragged(int mouseButton) {
+        if (!pressed || mouseButton != 0) {
+            return;
+        }
+        int rawX = Mouse.getEventX();
+        int rawY = Mouse.getEventY();
+        if (!spin.dragging()) {
+            int dx = rawX - pressRawX;
+            int dy = rawY - pressRawY;
+            if (dx * dx + dy * dy <= SPIN_START_PX * SPIN_START_PX) {
+                return;
+            }
+            spin.press();
+        }
+        float gx = guiX(rawX);
+        spin.drag((gx - lastDragX) * SPIN_PER_PX, System.nanoTime());
+        lastDragX = gx;
+    }
+
+    /**
+     * A button came up (during GuiScreen's mouse event). Right ends the item use. Left ends a spin, or else is a
+     * click in the view: with the sword on the model (not the held item) a hit, otherwise a swing.
+     */
+    public void mouseReleased(int mouseButton) {
+        if (mouseButton == 1) {
+            sim.rightRelease();
+            return;
+        }
+        if (mouseButton != 0 || !pressed) {
+            return;
+        }
+        pressed = false;
+        if (spin.dragging()) {
+            spin.release(System.nanoTime());
+            return;
+        }
+        if (!visible()) {
+            return;
+        }
+        int rawX = Mouse.getEventX();
+        int rawY = Mouse.getEventY();
+        boolean onModel = item == HeldItem.SWORD && ModelHitTest.hits(renderer.lastPartCorners(), guiX(rawX), guiY(rawY));
+        sim.leftClick(onModel);
+    }
+
+    /** GUI x of the centre of a display pixel column, unrounded, scaled the way GuiScreen scales mouse events. */
+    private float guiX(int rawX) {
+        return (rawX + 0.5F) * screenWidth / Math.max(1, mc.displayWidth);
+    }
+
+    /** GUI y (down from the top) of the centre of a display pixel row given bottom up, as LWJGL reports it. */
+    private float guiY(int rawY) {
+        return (mc.displayHeight - rawY - 0.5F) * screenHeight / Math.max(1, mc.displayHeight);
     }
 
     /** One client tick: item use, effects, projectiles and the arm swing. */
@@ -662,8 +836,10 @@ public final class PlayerPreviewPanel extends Gui {
         return new int[] {x, y, width, height};
     }
 
-    /** Frees the framebuffer and every preview texture; call when the screen closes. */
+    /** Frees the framebuffer and every preview texture and brings the cursor back; call when the screen closes. */
     public void close() {
+        hideCursor(false);
+        pressed = false;
         DevShots.detach(this);
         framebuffer.delete();
         PreviewTextures.clear();
