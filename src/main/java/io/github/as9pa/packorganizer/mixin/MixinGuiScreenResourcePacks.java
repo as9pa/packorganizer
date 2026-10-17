@@ -4,6 +4,7 @@ import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.Settings;
 import io.github.as9pa.packorganizer.gui.FilteredList;
 import io.github.as9pa.packorganizer.gui.PacksToolbar;
+import io.github.as9pa.packorganizer.gui.PlayerPreviewPanel;
 import io.github.as9pa.packorganizer.gui.PreviewCache;
 import java.io.IOException;
 import java.util.List;
@@ -35,6 +36,8 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
     @Shadow private GuiResourcePackSelected selectedResourcePacksList;
 
     @Unique private PacksToolbar packorganizer$toolbar;
+    /** Kept across resizes so the model's motion and the shown pack carry over; dropped on close. */
+    @Unique private PlayerPreviewPanel packorganizer$playerPreview;
     /** Scroll of both lists, kept across closing and reopening the screen (and window resizes). */
     @Unique private static int packorganizer$availableScroll;
     @Unique private static int packorganizer$selectedScroll;
@@ -75,10 +78,17 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         // After refresh, so the Available list's size (and so its scroll clamp) is the real one.
         availableResourcePacksList.scrollBy(packorganizer$availableScroll - availableResourcePacksList.getAmountScrolled());
         selectedResourcePacksList.scrollBy(packorganizer$selectedScroll - selectedResourcePacksList.getAmountScrolled());
+
+        if (packorganizer$playerPreview == null) {
+            packorganizer$playerPreview = new PlayerPreviewPanel(this);
+        }
+        packorganizer$playerPreview.setSelected(selectedResourcePacks);
+        packorganizer$playerPreview.layout(width, height);
     }
 
     @Inject(method = "drawScreen", at = @At("HEAD"))
     private void packorganizer$refreshView(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
+        PlayerPreviewPanel.resetHover();   // the list rows offer the hovered pack again this frame
         if (packorganizer$toolbar != null) {
             packorganizer$toolbar.refresh();
         }
@@ -119,6 +129,9 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
 
     @Inject(method = "drawScreen", at = @At("RETURN"))
     private void packorganizer$drawToolbar(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
+        if (packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.draw(mouseX, mouseY, partialTicks);
+        }
         if (packorganizer$toolbar != null) {
             packorganizer$toolbar.draw(mouseX, mouseY);
         }
@@ -131,10 +144,16 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         }
     }
 
-    /** Focuses the search box; a click the color panel takes never reaches the lists or buttons. */
+    /**
+     * Focuses the search box; a click the color panel or the player preview's buttons take never reaches the lists
+     * or buttons.
+     */
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void packorganizer$focusSearch(int mouseX, int mouseY, int mouseButton, CallbackInfo ci) {
         if (packorganizer$toolbar != null && packorganizer$toolbar.mouseClicked(mouseX, mouseY, mouseButton)) {
+            ci.cancel();
+        } else if (packorganizer$playerPreview != null
+                && packorganizer$playerPreview.mouseClicked(mouseX, mouseY, mouseButton)) {
             ci.cancel();
         }
     }
@@ -160,6 +179,10 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         packorganizer$saveScroll();
         Settings.saveNow();
         PreviewCache.clear();
+        if (packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.close();
+            packorganizer$playerPreview = null;
+        }
     }
 
     @Override
@@ -175,6 +198,9 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         super.updateScreen();
         if (packorganizer$toolbar != null) {
             packorganizer$toolbar.tick();
+        }
+        if (packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.tick();
         }
     }
 }

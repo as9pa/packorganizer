@@ -3,6 +3,7 @@ package io.github.as9pa.packorganizer.mixin;
 import io.github.as9pa.packorganizer.EntryExtension;
 import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.filter.PreviewSpec;
+import io.github.as9pa.packorganizer.gui.PlayerPreviewPanel;
 import io.github.as9pa.packorganizer.gui.PreviewCache;
 import io.github.as9pa.packorganizer.gui.RowBadge;
 import io.github.as9pa.packorganizer.gui.RowLayout;
@@ -12,6 +13,7 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreenResourcePacks;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.resources.ResourcePackListEntry;
+import net.minecraft.client.resources.ResourcePackListEntryDefault;
 import net.minecraft.client.resources.ResourcePackListEntryFound;
 import net.minecraft.client.resources.ResourcePackRepository;
 import org.spongepowered.asm.mixin.Final;
@@ -36,6 +38,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class MixinResourcePackListEntry implements RowLayout {
     @Shadow @Final protected Minecraft mc;
     @Shadow @Final protected GuiScreenResourcePacks resourcePacksGUI;
+
+    /** The row name as drawn, formatting codes included. */
+    @Shadow protected abstract String func_148312_b();
 
     /** Preview grid start, right of the 32 px icon, from the shifted x. */
     @Unique private static final int PREVIEW_OFFSET = 34;
@@ -89,11 +94,17 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         return vanillaWidth - packorganizer$indentPx();
     }
 
-    /** isSelected is the hover flag. The first hover starts the background load; text hides once it is ready. */
+    /**
+     * isSelected is the hover flag. A hovered pack row is offered to the player preview. The first hover starts the
+     * background load; text hides once it is ready.
+     */
     @Inject(method = "drawEntry", at = @At("HEAD"))
     private void packorganizer$lookUpPreview(int slotIndex, int x, int y, int listWidth, int slotHeight,
                                              int mouseX, int mouseY, boolean isSelected, CallbackInfo ci) {
         packorganizer$preview = null;
+        if (isSelected) {
+            packorganizer$offerHover();
+        }
         if (!isSelected || !PackOrganizer.settings().packPreviews
                 || !((Object) this instanceof ResourcePackListEntryFound)) {
             return;
@@ -102,6 +113,19 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         // Defensive: if the Entry mixin did not apply, there is no pack file to read.
         if (pack instanceof EntryExtension && ((EntryExtension) pack).packorganizer$file() != null) {
             packorganizer$preview = PreviewCache.get(((EntryExtension) pack).packorganizer$file());
+        }
+    }
+
+    /** Found rows offer their pack file, the Default row offers no file (the vanilla look); folder rows nothing. */
+    @Unique
+    private void packorganizer$offerHover() {
+        if ((Object) this instanceof ResourcePackListEntryDefault) {
+            PlayerPreviewPanel.offerHover(null, func_148312_b());
+        } else if ((Object) this instanceof ResourcePackListEntryFound) {
+            ResourcePackRepository.Entry pack = ((ResourcePackListEntryFound) (Object) this).func_148318_i();
+            if (pack instanceof EntryExtension && ((EntryExtension) pack).packorganizer$file() != null) {
+                PlayerPreviewPanel.offerHover(((EntryExtension) pack).packorganizer$file(), func_148312_b());
+            }
         }
     }
 
