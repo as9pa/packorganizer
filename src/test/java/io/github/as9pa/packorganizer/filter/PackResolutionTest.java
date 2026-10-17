@@ -9,16 +9,22 @@ import org.junit.Test;
 
 public class PackResolutionTest {
     @Test
-    public void bucketsAtBoundaries() {
+    public void bucketsRoundDownToAPowerOfTwoWithin16To128() {
         assertEquals(16, PackResolution.bucket(8));
         assertEquals(16, PackResolution.bucket(16));
-        assertEquals(32, PackResolution.bucket(17));
+        assertEquals(16, PackResolution.bucket(17));
+        assertEquals(16, PackResolution.bucket(20));
+        assertEquals(16, PackResolution.bucket(24));
+        assertEquals(16, PackResolution.bucket(31));
         assertEquals(32, PackResolution.bucket(32));
-        assertEquals(64, PackResolution.bucket(33));
+        assertEquals(32, PackResolution.bucket(48));
+        assertEquals(32, PackResolution.bucket(63));
         assertEquals(64, PackResolution.bucket(64));
-        assertEquals(128, PackResolution.bucket(65));
+        assertEquals(64, PackResolution.bucket(127));
         assertEquals(128, PackResolution.bucket(128));
+        assertEquals(128, PackResolution.bucket(256));
         assertEquals(128, PackResolution.bucket(512));
+        assertEquals(16, PackResolution.bucket(1));
     }
 
     @Test
@@ -42,7 +48,19 @@ public class PackResolutionTest {
     @Test
     public void widthsAreBucketedAfterVoting() {
         assertEquals(PackResolution.textures(128), PackResolution.fromWidths(Arrays.asList(512, 256)));
-        assertEquals(PackResolution.textures(32), PackResolution.fromWidths(Arrays.asList(20, 20, 64)));
+        assertEquals(PackResolution.textures(16), PackResolution.fromWidths(Arrays.asList(20, 20, 64)));
+    }
+
+    @Test
+    public void voteWonByWidth20LandsInThe16Bucket() {
+        assertEquals(PackResolution.textures(16), PackResolution.fromWidths(Arrays.asList(20, 20, 20, 16, 16)));
+    }
+
+    @Test
+    public void mostCommonBreaksTiesToTheLargerWidth() {
+        assertEquals(32, PackResolution.mostCommon(Arrays.asList(16, 32)));
+        assertEquals(16, PackResolution.mostCommon(Arrays.asList(16, 16, 32)));
+        assertEquals(0, PackResolution.mostCommon(Collections.<Integer>emptyList()));
     }
 
     @Test
@@ -59,5 +77,18 @@ public class PackResolutionTest {
         assertEquals(PackResolution.textures(32).hashCode(), PackResolution.textures(32).hashCode());
         assertNotEquals(PackResolution.textures(32), PackResolution.textures(16));
         assertNotEquals(PackResolution.OVERLAY, PackResolution.UNKNOWN);
+    }
+
+    @Test
+    public void statedValueKeepsItsNumberButFiltersByBucket() {
+        PackResolution r = PackResolution.stated(256);
+        assertEquals(PackResolution.Kind.TEXTURES, r.kind);
+        assertEquals(128, r.res);
+        assertEquals(256, r.stated);
+        assertEquals("256x", r.badge());
+        assertEquals(16, PackResolution.stated(8).res);
+        assertEquals("8x", PackResolution.stated(8).badge());
+        assertNotEquals(PackResolution.textures(128), r);
+        assertEquals(0, PackResolution.textures(32).stated);
     }
 }

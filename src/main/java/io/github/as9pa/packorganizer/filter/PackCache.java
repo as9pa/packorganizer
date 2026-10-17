@@ -25,7 +25,7 @@ import java.util.Map;
  * Thread-safe; loaded lazily on first use; never throws into the caller.
  */
 public final class PackCache {
-    public static final int FORMAT_VERSION = 1;
+    public static final int FORMAT_VERSION = 4;
 
     private final File file;
     private final Map<String, PackResolution> entries = new HashMap<>();
@@ -72,6 +72,9 @@ public final class PackCache {
             JsonObject o = new JsonObject();
             o.addProperty("res", e.getValue().res);
             o.addProperty("kind", e.getValue().kind.name());
+            if (e.getValue().stated > 0) {
+                o.addProperty("stated", e.getValue().stated);
+            }
             packs.add(e.getKey(), o);
         }
         JsonObject root = new JsonObject();
@@ -145,7 +148,9 @@ public final class PackCache {
         JsonObject o = element.getAsJsonObject();
         PackResolution.Kind kind = PackResolution.Kind.valueOf(o.get("kind").getAsString());
         if (kind == PackResolution.Kind.TEXTURES) {
-            return PackResolution.textures(o.get("res").getAsInt());
+            int res = o.get("res").getAsInt();
+            JsonElement stated = o.get("stated");
+            return stated == null ? PackResolution.textures(res) : PackResolution.stated(stated.getAsInt());
         }
         return kind == PackResolution.Kind.OVERLAY ? PackResolution.OVERLAY : PackResolution.UNKNOWN;
     }

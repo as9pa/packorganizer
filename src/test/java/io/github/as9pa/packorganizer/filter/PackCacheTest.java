@@ -56,6 +56,41 @@ public class PackCacheTest {
     }
 
     @Test
+    public void statedValueRoundTripsThroughTheFile() {
+        PackCache cache = new PackCache(json());
+        cache.put("a.zip:1:1", PackResolution.stated(256));
+        cache.put("b.zip:2:2", PackResolution.stated(8));
+        cache.put("c.zip:3:3", PackResolution.textures(128));
+        assertTrue(cache.flush());
+
+        PackCache reloaded = new PackCache(json());
+        PackResolution a = reloaded.lookup("a.zip:1:1");
+        assertEquals(PackResolution.stated(256), a);
+        assertEquals(128, a.res);
+        assertEquals("256x", a.badge());
+        assertEquals(PackResolution.stated(8), reloaded.lookup("b.zip:2:2"));
+        assertEquals(PackResolution.textures(128), reloaded.lookup("c.zip:3:3"));
+    }
+
+    @Test
+    public void formatVersionOneIsRescanned() throws IOException {
+        TestPacks.write(json(), "{\"version\":1,\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"}}}".getBytes("UTF-8"));
+        assertEquals(0, new PackCache(json()).size());
+    }
+
+    @Test
+    public void formatVersionTwoIsRescanned() throws IOException {
+        TestPacks.write(json(), "{\"version\":2,\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"}}}".getBytes("UTF-8"));
+        assertEquals(0, new PackCache(json()).size());
+    }
+
+    @Test
+    public void formatVersionThreeIsRescanned() throws IOException {
+        TestPacks.write(json(), "{\"version\":3,\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"}}}".getBytes("UTF-8"));
+        assertEquals(0, new PackCache(json()).size());
+    }
+
+    @Test
     public void puttingTheSameValueDoesNotDirty() {
         PackCache cache = new PackCache(json());
         cache.put("a.zip:1:1", PackResolution.textures(16));
@@ -86,14 +121,14 @@ public class PackCacheTest {
 
     @Test
     public void unknownKindInFileIsSkipped() throws IOException {
-        TestPacks.write(json(), "{\"version\":1,\"packs\":{\"a.zip:1:1\":{\"res\":0,\"kind\":\"WEIRD\"}}}".getBytes("UTF-8"));
+        TestPacks.write(json(), ("{\"version\":" + PackCache.FORMAT_VERSION + ",\"packs\":{\"a.zip:1:1\":{\"res\":0,\"kind\":\"WEIRD\"}}}").getBytes("UTF-8"));
         PackCache cache = new PackCache(json());
         assertEquals(0, cache.size());
     }
 
     @Test
     public void malformedEntryIsSkippedButOthersLoad() throws IOException {
-        TestPacks.write(json(), ("{\"version\":1,\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"},"
+        TestPacks.write(json(), ("{\"version\":" + PackCache.FORMAT_VERSION + ",\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"},"
                 + "\"b.zip:2:2\":{\"kind\":\"TEXTURES\"}}}").getBytes("UTF-8"));
         PackCache cache = new PackCache(json());
         assertEquals(PackResolution.textures(16), cache.lookup("a.zip:1:1"));
@@ -103,7 +138,7 @@ public class PackCacheTest {
 
     @Test
     public void nonObjectEntryIsSkippedButOthersLoad() throws IOException {
-        TestPacks.write(json(), ("{\"version\":1,\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"},"
+        TestPacks.write(json(), ("{\"version\":" + PackCache.FORMAT_VERSION + ",\"packs\":{\"a.zip:1:1\":{\"res\":16,\"kind\":\"TEXTURES\"},"
                 + "\"c.zip:3:3\":5}}").getBytes("UTF-8"));
         PackCache cache = new PackCache(json());
         assertEquals(PackResolution.textures(16), cache.lookup("a.zip:1:1"));
