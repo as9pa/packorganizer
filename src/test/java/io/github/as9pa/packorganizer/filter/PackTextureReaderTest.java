@@ -1,12 +1,16 @@
 package io.github.as9pa.packorganizer.filter;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.Rule;
 import org.junit.Test;
@@ -67,5 +71,63 @@ public class PackTextureReaderTest {
             assertNull(b);
         }
         assertNotNull(PackTextureReader.read(new File(tmp.getRoot(), "absent.zip")));
+    }
+
+    private static final String ARMOR = "models/armor/diamond_layer_1.png";
+    private static final String PULL = "items/bow_pulling_0.png";
+    private static final String GLINT = "misc/enchanted_item_glint.png";
+    private static final List<String> MODEL = Arrays.asList(ARMOR, PULL, GLINT, "items/bow_standby.png");
+
+    @Test
+    public void readPathsFromZipCropsOnlyItemStrips() throws Exception {
+        Map<String, byte[]> e = new LinkedHashMap<>();
+        e.put("pack.mcmeta", TestPacks.MCMETA);
+        e.put(ModelSpec.ROOT + ARMOR, TestPacks.png(64, 32));
+        e.put(ModelSpec.ROOT + PULL, TestPacks.png(16, 48));
+        e.put(ModelSpec.ROOT + GLINT, TestPacks.png(16, 32));
+        File pack = TestPacks.zip(new File(tmp.getRoot(), "m.zip"), e);
+
+        assertModel(PackTextureReader.readPaths(pack, MODEL));
+    }
+
+    @Test
+    public void readPathsFromFolder() throws Exception {
+        File dir = tmp.newFolder("model");
+        TestPacks.write(new File(dir, "pack.mcmeta"), TestPacks.MCMETA);
+        TestPacks.write(new File(dir, ModelSpec.ROOT + ARMOR), TestPacks.png(64, 32));
+        TestPacks.write(new File(dir, ModelSpec.ROOT + PULL), TestPacks.png(16, 48));
+        TestPacks.write(new File(dir, ModelSpec.ROOT + GLINT), TestPacks.png(16, 32));
+
+        assertModel(PackTextureReader.readPaths(dir, MODEL));
+    }
+
+    private static void assertModel(Map<String, BufferedImage> got) {
+        assertEquals(3, got.size());
+        assertEquals(64, got.get(ARMOR).getWidth());
+        assertEquals(32, got.get(ARMOR).getHeight());
+        assertEquals(16, got.get(PULL).getWidth());
+        assertEquals(16, got.get(PULL).getHeight());
+        assertEquals(32, got.get(GLINT).getHeight());
+        assertFalse(got.containsKey("items/bow_standby.png"));
+    }
+
+    @Test
+    public void readPathsSkipsCorruptAndUnreadablePacks() throws Exception {
+        Map<String, byte[]> e = new LinkedHashMap<>();
+        e.put(ModelSpec.ROOT + ARMOR, "not a png".getBytes());
+        e.put(ModelSpec.ROOT + PULL, TestPacks.png(16, 16));
+        File pack = TestPacks.zip(new File(tmp.getRoot(), "badm.zip"), e);
+        Map<String, BufferedImage> got = PackTextureReader.readPaths(pack, MODEL);
+        assertFalse(got.containsKey(ARMOR));
+        assertEquals(16, got.get(PULL).getWidth());
+
+        File dir = tmp.newFolder("badfolder");
+        TestPacks.write(new File(dir, ModelSpec.ROOT + ARMOR), "not a png".getBytes());
+        assertTrue(PackTextureReader.readPaths(dir, MODEL).isEmpty());
+
+        File notZip = new File(tmp.getRoot(), "junkm.zip");
+        TestPacks.write(notZip, "junk".getBytes());
+        assertTrue(PackTextureReader.readPaths(notZip, MODEL).isEmpty());
+        assertTrue(PackTextureReader.readPaths(new File(tmp.getRoot(), "absentm.zip"), MODEL).isEmpty());
     }
 }
