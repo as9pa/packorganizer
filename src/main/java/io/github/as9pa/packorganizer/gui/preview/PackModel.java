@@ -164,6 +164,12 @@ public final class PackModel {
         return Math.min(1F, (Minecraft.getSystemTime() - fadeStart) / (float) SKY_FADE_MS);
     }
 
+    /** True once the full size sky is uploaded and faded in, or when there is no sky; for {@link DevShots}. */
+    boolean skySharp() {
+        advanceSky();
+        return skyLowIds.length == 0 || fadeStart >= 0 && !fading();
+    }
+
     /**
      * Opaque bounds {x, y, width, height} of a material's helmet icon in its texels, the leather overlay included;
      * the whole image when nothing is drawn, all zero when there is no icon. Thread safe.

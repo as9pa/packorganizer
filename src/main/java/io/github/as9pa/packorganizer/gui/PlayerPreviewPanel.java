@@ -6,6 +6,7 @@ import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.Settings;
 import io.github.as9pa.packorganizer.filter.ModelSpec;
 import io.github.as9pa.packorganizer.filter.PackPaths;
+import io.github.as9pa.packorganizer.gui.preview.DevShots;
 import io.github.as9pa.packorganizer.gui.preview.HeadFollow;
 import io.github.as9pa.packorganizer.gui.preview.HeldItem;
 import io.github.as9pa.packorganizer.gui.preview.PackModel;
@@ -136,6 +137,17 @@ public final class PlayerPreviewPanel extends Gui {
     private int ticks;
     private long lastFrameNanos = -1;
     private boolean failed;
+    /** True when {@link #shown} is the model for this frame's pack, not one kept while it loads. */
+    private boolean shownCurrent;
+
+    // DevShots only: a forced pack (none forced is nothing hovered), mouse and spin; never set in a normal install.
+    private boolean debug;
+    private boolean debugForced;
+    private File debugFile;
+    private String debugName;
+    private int debugMouseX;
+    private int debugMouseY;
+    private float debugSpin;
 
     public PlayerPreviewPanel(GuiScreen screen) {
         this.mc = screen.mc != null ? screen.mc : Minecraft.getMinecraft();
@@ -152,6 +164,7 @@ public final class PlayerPreviewPanel extends Gui {
         item = HeldItem.fromId(settings.previewItem);
         sim.setItem(item);
         sim.setEnchanted(settings.previewEnchanted);
+        DevShots.attach(this);
     }
 
     /** A list row drawn hovered this frame; a null file is the Default row. */
@@ -224,6 +237,14 @@ public final class PlayerPreviewPanel extends Gui {
         if (!visible()) {
             return;
         }
+        if (debug) {
+            mouseX = debugMouseX;
+            mouseY = debugMouseY;
+            hoverOffered = debugForced;
+            hoverFile = debugFile;
+            hoverName = debugName;
+            hasLast &= debugForced;
+        }
         long now = System.nanoTime();
         float seconds = lastFrameNanos < 0 ? 0F : (now - lastFrameNanos) / 1e9F;
         boolean firstFrame = lastFrameNanos < 0;
@@ -281,6 +302,7 @@ public final class PlayerPreviewPanel extends Gui {
         if (next != null) {
             shown = next;
         }
+        shownCurrent = next != null;
         shownName = name == null ? "" : name;
     }
 
@@ -335,7 +357,7 @@ public final class PlayerPreviewPanel extends Gui {
         pose.bodyYaw = head.bodyYaw();
         pose.headYaw = head.headYaw();
         pose.pitch = head.pitch();
-        pose.spin = spin.angle();
+        pose.spin = spin.angle() + debugSpin;
         pose.swing = sim.swing().progress(partial);
         pose.blocking = sim.blocking();
         pose.aimingBow = sim.aimingBow();
@@ -566,8 +588,57 @@ public final class PlayerPreviewPanel extends Gui {
         sim.tick();
     }
 
+    /** DevShots only: forces the shown pack ({@code forced} false is nothing hovered), the mouse and a spin. */
+    public void debugOverride(boolean forced, File pack, String name, int mouseX, int mouseY, float spinDeg) {
+        debug = true;
+        debugForced = forced;
+        debugFile = pack;
+        debugName = name;
+        debugMouseX = mouseX;
+        debugMouseY = mouseY;
+        debugSpin = spinDeg;
+    }
+
+    /** DevShots only: holds the item as if its button was clicked. */
+    public void debugItem(HeldItem held) {
+        PackOrganizer.settings().previewItem = held.id;
+        item = held;
+        sim.setItem(held);
+    }
+
+    /** DevShots only: turns Enchanted on or off as if its button was clicked. */
+    public void debugEnchanted(boolean on) {
+        PackOrganizer.settings().previewEnchanted = on;
+        sim.setEnchanted(on);
+    }
+
+    /** DevShots only: the right button goes down or up. */
+    public void debugUse(boolean down) {
+        if (down) {
+            sim.rightPress();
+        } else {
+            sim.rightRelease();
+        }
+    }
+
+    /** DevShots only: a sword click lands on the model. */
+    public void debugHit() {
+        sim.leftClick(true);
+    }
+
+    /** DevShots only: the model for this frame's pack, or null while it loads. */
+    public PackModel debugModel() {
+        return shownCurrent ? shown : null;
+    }
+
+    /** DevShots only: the panel rect {x, y, width, height} in GUI px. */
+    public int[] debugBounds() {
+        return new int[] {x, y, width, height};
+    }
+
     /** Frees the framebuffer and every preview texture; call when the screen closes. */
     public void close() {
+        DevShots.detach(this);
         framebuffer.delete();
         PreviewTextures.clear();
         shown = null;

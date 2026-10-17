@@ -1,5 +1,6 @@
 package io.github.as9pa.packorganizer;
 
+import io.github.as9pa.packorganizer.gui.preview.DevShots;
 import java.io.File;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.Mod;
@@ -15,6 +16,7 @@ public class PackOrganizer {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         Log.LOG.info("packorganizer initialised");
+        DevShots.init();
     }
 
     /**
