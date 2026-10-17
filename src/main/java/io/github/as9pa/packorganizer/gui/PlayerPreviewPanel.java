@@ -304,7 +304,31 @@ public final class PlayerPreviewPanel extends Gui {
             shown = next;
         }
         shownCurrent = next != null;
-        shownName = name == null ? "" : name;
+        shownName = name == null ? "" : panelName(name);
+    }
+
+    /**
+     * The name as the mock shows it in the narrow name slot: without a ".zip" ending and without the leading "!"
+     * and spaces packs use to sort first (color codes kept), so "!          Lotus.zip" shows as "Lotus".
+     */
+    static String panelName(String name) {
+        if (name.regionMatches(true, Math.max(0, name.length() - 4), ".zip", 0, 4) && name.length() > 4) {
+            name = name.substring(0, name.length() - 4);
+        }
+        StringBuilder codes = new StringBuilder();
+        int i = 0;
+        while (i < name.length()) {
+            char c = name.charAt(i);
+            if (c == '§' && i + 1 < name.length()) {
+                codes.append(c).append(name.charAt(i + 1));
+                i += 2;
+            } else if (c == '!' || Character.isWhitespace(c)) {
+                i++;
+            } else {
+                break;
+            }
+        }
+        return i == 0 || i == name.length() ? name : codes + name.substring(i);
     }
 
     /** Sky and model inside the multisampled target, or scissored straight to the screen without it. */
