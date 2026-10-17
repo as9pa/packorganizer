@@ -36,8 +36,9 @@ import org.lwjgl.opengl.GL12;
  * Dev-only screenshot harness for the player preview, compared by eye against the approved mock states. Inert unless
  * {@code <mcDataDir>/config/packorganizer/devshots.properties} exists. Then, on the title screen, it sizes the window
  * to 1920x1057 at GUI scale 2, opens the Resource Packs screen and for each state forces the panel's pack and mouse,
- * waits for the pack and its sharp sky (or {@link #READY_TIMEOUT_MS}), lets {@link #SETTLE_FRAMES} frames pass and
- * saves {@code <state>.png} (the panel with the mock's 8 px margin) and {@code <state>-full.png}, then quits.
+ * waits for the pack and its sharp sky (or {@link #READY_TIMEOUT_MS}), lets {@link #SETTLE_FRAMES} frames pass, runs
+ * the state's actions on its tick clock and saves {@code <state>.png} (the panel with the mock's 8 px margin) and
+ * {@code <state>-full.png}, then quits.
  *
  * <p>Keys: {@code pack} (substring of the pack file name), {@code mouse} (GUI x,y the head follows), {@code states}
  * (comma list, default all in table order), {@code out} (folder under the game dir, default screenshots/devshots).
@@ -54,9 +55,10 @@ public final class DevShots {
     private static final int CROP_MARGIN = 8;
 
     /**
-     * One screenshot. A state runs on a tick clock from 0: the right button goes down at 0 when {@code pressTicks}
-     * is set and comes up at {@code releaseTick}, a hit lands at {@code hitTick}, and the shot waits for
-     * {@code shotTick} as well as the pack. Use, hit and enchanted states are rows built from these.
+     * One screenshot. A state runs on a tick clock from 0, started once the pack and sky are ready and settled: the
+     * right button goes down at 0 when {@code press} is set and comes up at {@code releaseTick}, a hit lands at
+     * {@code hitTick}, and the shot is the first frame at {@code shotTick}. Use, hit and enchanted states are rows
+     * built from these, timed like the mock's {@code act} and {@code at} (seconds at 20 ticks).
      */
     static final class State {
         final String name;
@@ -117,7 +119,15 @@ public final class DevShots {
         add(new State("skyoff").skyOff());
         add(new State("idle").idle());
         add(new State("small").window(1200, 700));
-        add(new State("hit").hit(10, 1));
+        // shoot.js mouse positions are 1920x1057 page px, so GUI px are half.
+        add(new State("hit").enchanted().hit(1, 3));
+        add(new State("use-arrow").item(HeldItem.BOW).use(20, 1));
+        add(new State("use-pearl").item(HeldItem.ENDER_PEARL).mouse(360, 75).use(1, 0));
+        add(new State("use-pearl-land").item(HeldItem.ENDER_PEARL).mouse(360, 75).use(1, 11));
+        add(new State("use-eat").item(HeldItem.GOLDEN_APPLE).hold(26));
+        add(new State("use-effects").item(HeldItem.GOLDEN_APPLE).hold(70));
+        add(new State("use-splash").item(HeldItem.SPLASH_POTION).mouse(822, 500).use(1, 20));
+        add(new State("use-rod").item(HeldItem.FISHING_ROD).mouse(770, 320).use(1, 49));
         add(new State("crosshair").mouse(900, 160));   // over the sky right of the head at 1920x1057
         add(new State("ench").enchanted());
         add(new State("ench-bow").item(HeldItem.BOW).enchanted().hold(20));
@@ -136,9 +146,13 @@ public final class DevShots {
 
     private boolean started;
     private int index = -1;
-    private int tick;
+    /** Ticks on the state's clock; -1 until the pack and sky are ready and the settle frames have passed. */
+    private int tick = -1;
     private long stateStartMs;
+    /** Settle frames counted since ready; -1 before. */
     private int frames = -1;
+    /** The shot tick has come; the next rendered frame is saved. */
+    private boolean shoot;
     private Restore restore;
 
     /** The settings a run changes, put back before it quits. */
@@ -247,11 +261,18 @@ public final class DevShots {
             }
             return;
         }
-        if (index < 0 || index >= queue.size() || frames >= 0) {
+        if (index < 0 || index >= queue.size() || shoot) {
             return;
         }
         State s = queue.get(index);
         if (!(mc.currentScreen instanceof GuiScreenResourcePacks) || panel == null) {
+            return;
+        }
+        if (tick < 0) {
+            // The clock waits for the pack and sky, so a short action is not over before they load.
+            if (frames < 0 && (ready(s) || Minecraft.getSystemTime() - stateStartMs > READY_TIMEOUT_MS)) {
+                frames = 0;
+            }
             return;
         }
         tick++;
@@ -261,19 +282,28 @@ public final class DevShots {
         if (tick == s.hitTick) {
             panel.debugHit();
         }
-        if (tick >= s.shotTick && (ready(s) || Minecraft.getSystemTime() - stateStartMs > READY_TIMEOUT_MS)) {
-            frames = 0;
+        if (tick >= s.shotTick) {
+            shoot = true;
         }
     }
 
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || frames < 0 || ++frames < SETTLE_FRAMES) {
+        if (event.phase != TickEvent.Phase.END || index < 0 || index >= queue.size()) {
             return;
         }
-        frames = -1;
-        capture(queue.get(index));
-        next();
+        if (frames >= 0 && ++frames >= SETTLE_FRAMES) {
+            // Settled: the state's clock starts and the right button goes down.
+            frames = -1;
+            tick = 0;
+            if (queue.get(index).press && panel != null) {
+                panel.debugUse(true);
+            }
+        } else if (shoot) {
+            shoot = false;
+            capture(queue.get(index));
+            next();
+        }
     }
 
     private boolean ready(State s) {
@@ -294,6 +324,9 @@ public final class DevShots {
             return;
         }
         State s = queue.get(index);
+        tick = -1;   // before apply(), so the right button waits for the new state's clock
+        frames = -1;
+        shoot = false;
         if (mc.displayWidth != s.windowW || mc.displayHeight != s.windowH) {
             try {
                 Display.setDisplayMode(new DisplayMode(s.windowW, s.windowH));
@@ -307,12 +340,11 @@ public final class DevShots {
         } else if (panel != null) {
             apply(s);
         }
-        tick = 0;
         stateStartMs = Minecraft.getSystemTime();
         Log.LOG.info("devshots: state {}", s.name);
     }
 
-    /** Puts the panel and settings in the state's pose; the right button goes down here, at tick 0. */
+    /** Puts the panel and settings in the state's pose; the right button waits for the clock to start. */
     private void apply(State s) {
         Settings settings = PackOrganizer.settings();
         settings.previewArmor = s.armor;
@@ -324,7 +356,7 @@ public final class DevShots {
         int mx = s.mouse != null ? s.mouse[0] : mouseX;
         int my = s.mouse != null ? s.mouse[1] : mouseY;
         panel.debugOverride(s.forcePack && packFile != null, packFile, packName, mx, my, s.spin);
-        if (s.press) {
+        if (s.press && tick >= 0) {
             panel.debugUse(true);
         }
     }

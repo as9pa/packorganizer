@@ -16,6 +16,7 @@ import io.github.as9pa.packorganizer.gui.preview.PlayerModelRenderer;
 import io.github.as9pa.packorganizer.gui.preview.PreviewFramebuffer;
 import io.github.as9pa.packorganizer.gui.preview.PreviewSim;
 import io.github.as9pa.packorganizer.gui.preview.PreviewTextures;
+import io.github.as9pa.packorganizer.gui.preview.PreviewWorld;
 import io.github.as9pa.packorganizer.gui.preview.SkinSource;
 import io.github.as9pa.packorganizer.gui.preview.SkinTextures;
 import io.github.as9pa.packorganizer.gui.preview.SkyBackdrop;
@@ -281,6 +282,9 @@ public final class PlayerPreviewPanel extends Gui {
         Gui.drawRect(x, y, x + width, y + height, BACKDROP);
         int scale = new ScaledResolution(mc).getScaleFactor();
         drawView(mouseX, mouseY, partial, seconds, firstFrame, scale);
+        if (shown != null) {
+            PreviewWorld.drawEffects(shown, sim.effects(), mc.fontRendererObj, viewX + 2, viewY + 2);
+        }
         drawButtons(mouseX, mouseY, scale);
         FontRenderer font = mc.fontRendererObj;
         if (titleShown) {
@@ -424,7 +428,7 @@ public final class PlayerPreviewPanel extends Gui {
         return i == 0 || i == name.length() ? name : codes + name.substring(i);
     }
 
-    /** Sky and model inside the multisampled target, or scissored straight to the screen without it. */
+    /** Sky, model and world effects inside the multisampled target, or scissored straight to the screen without it. */
     private void drawView(int mouseX, int mouseY, float partial, float seconds, boolean firstFrame, int scale) {
         if (viewW <= 0 || viewH <= 0) {
             return;
@@ -445,6 +449,9 @@ public final class PlayerPreviewPanel extends Gui {
         updatePose(partial);
         // Projectiles leave along the eased head direction, turned with the spin (yaw 0 faces +z).
         sim.setAim((float) Math.toRadians(pose.spin - pose.headYaw), (float) Math.toRadians(pose.pitch));
+        // Flying projectiles 8 px past the view's sides or bottom are gone, as in the mock.
+        sim.world().setViewBounds((viewX - 8 - centerX) / block, (viewX + viewW + 8 - centerX) / block,
+                (feetY - (viewY + viewH + 8)) / block);
 
         boolean multisampled = framebuffer.begin(viewX, viewY, viewW, viewH);
         try {
@@ -457,6 +464,7 @@ public final class PlayerPreviewPanel extends Gui {
             SkyBackdrop.draw(shown, viewX, viewY, viewW, viewH, Minecraft.getSystemTime() - (debug ? debugSkyStart : startMs), settings.skyCycle);
             if (shown != null) {
                 renderer.render(shown, pose, skin(settings), centerX, feetY, block);
+                PreviewWorld.draw(shown, sim.world(), renderer.lastRodTip(), centerX, feetY, block, partial);
             }
         } catch (RuntimeException e) {
             if (!failed) {
