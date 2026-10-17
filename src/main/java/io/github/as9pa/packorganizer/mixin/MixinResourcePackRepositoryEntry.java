@@ -25,8 +25,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class MixinResourcePackRepositoryEntry implements EntryExtension {
 
     @Shadow @Final private File resourcePackFile;
-    // field_110525_a has no MCP name, so it is the same in dev and at runtime; do not remap it.
-    @Shadow(remap = false) @Final ResourcePackRepository field_110525_a;
 
     @Unique private volatile PackResolution packorganizer$resolution;
     @Unique private volatile PackColors packorganizer$colors;
@@ -51,7 +49,12 @@ public abstract class MixinResourcePackRepositoryEntry implements EntryExtension
      */
     @Inject(method = "getResourcePackName", at = @At("HEAD"), cancellable = true)
     private void packorganizer$relativeName(CallbackInfoReturnable<String> cir) {
-        File root = field_110525_a.getDirResourcepacks();
+        // Not through the entry's outer-instance field: that synthetic field is field_110525_a in the dev jar but
+        // keeps its obfuscated name in the real game, where shadowing it crashed startup. options.txt matching runs in
+        // the repository's constructor, before Minecraft holds it, so fall back to the folder startGame passes it.
+        Minecraft mc = Minecraft.getMinecraft();
+        ResourcePackRepository repository = mc.getResourcePackRepository();
+        File root = repository != null ? repository.getDirResourcepacks() : new File(mc.mcDataDir, "resourcepacks");
         File parent = resourcePackFile.getAbsoluteFile().getParentFile();
         if (parent == null || parent.equals(root.getAbsoluteFile())
                 || !resourcePackFile.getAbsolutePath().startsWith(root.getAbsolutePath() + File.separator)) {
