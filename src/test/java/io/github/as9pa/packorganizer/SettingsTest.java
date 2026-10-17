@@ -9,8 +9,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -121,5 +123,86 @@ public class SettingsTest {
         first.colorFilter = false;
         Settings.saveNow();
         assertFalse(Settings.load(new File(dir, "settings.json")).colorFilter);
+    }
+
+    @Test
+    public void newPreviewDefaults() {
+        Settings s = new Settings();
+        assertTrue(s.playerPreview);
+        assertTrue(s.skyBackdrop);
+        assertTrue(s.skyCycle);
+        assertTrue(s.showCape);
+        assertEquals("diamond", s.previewArmor);
+        assertEquals("sword", s.previewItem);
+        assertFalse(s.previewEnchanted);
+    }
+
+    @Test
+    public void previewFieldsRoundTrip() {
+        Settings s = Settings.load(json());
+        s.playerPreview = false;
+        s.skyBackdrop = false;
+        s.skyCycle = false;
+        s.showCape = false;
+        s.previewArmor = "gold";
+        s.previewItem = "bow";
+        s.previewEnchanted = true;
+        s.save(json());
+
+        Settings r = Settings.load(json());
+        assertFalse(r.playerPreview);
+        assertFalse(r.skyBackdrop);
+        assertFalse(r.skyCycle);
+        assertFalse(r.showCape);
+        assertEquals("gold", r.previewArmor);
+        assertEquals("bow", r.previewItem);
+        assertTrue(r.previewEnchanted);
+    }
+
+    @Test
+    public void unknownArmorOrItemFallsBack() throws IOException {
+        writeJson("{\"previewArmor\": \"netherite\", \"previewItem\": 42}");
+        Settings r = Settings.load(json());
+        assertEquals("diamond", r.previewArmor);
+        assertEquals("sword", r.previewItem);
+    }
+
+    @Test
+    public void switchesAreListedInOrder() {
+        List<String> labels = new ArrayList<>();
+        for (Settings.Switch sw : Settings.SWITCHES) {
+            labels.add(sw.label);
+        }
+        assertEquals(Arrays.asList(
+                "Pack previews", "Transparent background", "Pack folders",
+                "Color filter", "Resolution labels", "Remember open folders",
+                "Player preview", "Pack sky backdrop", "Sky day cycle", "Show cape"), labels);
+    }
+
+    @Test
+    public void everySwitchTogglesOnlyItsOwnField() {
+        for (int i = 0; i < Settings.SWITCHES.size(); i++) {
+            Settings s = new Settings();
+            boolean[] before = snapshot(s);
+            Settings.Switch sw = Settings.SWITCHES.get(i);
+            sw.set(s, !sw.get(s));
+            boolean[] after = snapshot(s);
+            int changed = 0;
+            for (int j = 0; j < before.length; j++) {
+                if (before[j] != after[j]) {
+                    changed++;
+                }
+            }
+            assertEquals("switch " + sw.label, 1, changed);
+        }
+    }
+
+    /** Every boolean setting in a fixed order, including Enchanted which has no switch. */
+    private static boolean[] snapshot(Settings s) {
+        return new boolean[] {
+                s.packPreviews, s.transparentBackground, s.packFolders, s.colorFilter,
+                s.resolutionLabels, s.rememberOpenFolders,
+                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewEnchanted
+        };
     }
 }
