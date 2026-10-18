@@ -21,6 +21,7 @@ import io.github.as9pa.packorganizer.gui.preview.SkinSource;
 import io.github.as9pa.packorganizer.gui.preview.SkinTextures;
 import io.github.as9pa.packorganizer.gui.preview.SkyBackdrop;
 import io.github.as9pa.packorganizer.gui.preview.SpinSpring;
+import io.github.as9pa.packorganizer.gui.preview.SubTick;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
@@ -52,8 +53,8 @@ import org.lwjgl.opengl.GL11;
 /**
  * The player preview right of the Selected list: a tinted panel with the armor buttons and Enchanted toggle on top,
  * the shown pack's name and the item buttons at the bottom, and the pack's sky and player model in the view box
- * between them. List rows offer the hovered pack each frame; with nothing hovered the panel keeps the last hovered
- * pack while the mouse is over it, else shows the top turned-on pack.
+ * between them. List rows offer the hovered pack each frame; the panel keeps the last hovered pack until another row
+ * is hovered, the screen closes or the pack's file is gone, and before any hover shows the top turned-on pack.
  */
 public final class PlayerPreviewPanel extends Gui {
     /** Narrower screens have no room right of the lists; the screen then looks like 0.2.0. */
@@ -82,8 +83,6 @@ public final class PlayerPreviewPanel extends Gui {
     private static final int BUTTON_V_LIT = 86;
     /** Instant health, the healing splash potion's color. */
     private static final int SPLASH_TINT = 0xF82423;
-    /** With nothing hovered, the last hovered pack stays this long so the mouse can cross into the panel. */
-    private static final long HOVER_GRACE_MS = 300;
     private static final float SPIN_PER_PX = 1.5F;
     /** A left press in the view that moves more than this (screen px) becomes a spin instead of a click. */
     private static final int SPIN_START_PX = 3;
@@ -121,6 +120,8 @@ public final class PlayerPreviewPanel extends Gui {
     private final HeadFollow head = new HeadFollow();
     private final SpinSpring spin = new SpinSpring();
     private final PreviewSim sim = new PreviewSim(new Random());
+    /** The partial tick everything tick-driven draws with; the screen's freezes while the game is paused. */
+    private final SubTick subTick = new SubTick();
     private final List<Button> topRow = new ArrayList<>();
     private final List<Button> itemRow = new ArrayList<>();
     private final List<Button> buttons = new ArrayList<>();
@@ -145,7 +146,6 @@ public final class PlayerPreviewPanel extends Gui {
     private boolean hasLast;
     private File lastFile;
     private String lastName;
-    private long lastHoverMs;
     /** The model on screen; kept while the next pack loads so the panel never blanks. */
     private PackModel shown;
     private String shownName = "";
@@ -260,7 +260,11 @@ public final class PlayerPreviewPanel extends Gui {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
-    public void draw(int mouseX, int mouseY, float partial) {
+    /**
+     * {@code screenPartial} is unused: it stays frozen while the game is paused, and the Resource Packs screen is
+     * often opened from the pause menu, so the panel times its partial tick from its own ticks instead.
+     */
+    public void draw(int mouseX, int mouseY, float screenPartial) {
         if (!visible()) {
             hideCursor(false);
             return;
@@ -277,7 +281,8 @@ public final class PlayerPreviewPanel extends Gui {
         float seconds = lastFrameNanos < 0 ? 0F : (now - lastFrameNanos) / 1e9F;
         boolean firstFrame = lastFrameNanos < 0;
         lastFrameNanos = now;
-        choosePack(mouseX, mouseY);
+        float partial = subTick.partial(now);
+        choosePack();
 
         Gui.drawRect(x, y, x + width, y + height, BACKDROP);
         int scale = new ScaledResolution(mc).getScaleFactor();
@@ -363,18 +368,15 @@ public final class PlayerPreviewPanel extends Gui {
         return emptyCursor;
     }
 
-    /** Hovered pack, else the last hovered while the mouse is over the panel (or just left a row), else the top on. */
-    private void choosePack(int mouseX, int mouseY) {
-        long now = Minecraft.getSystemTime();
+    /**
+     * Hovered pack, else the last hovered (kept when the mouse moves onto the panel or its row leaves the list), else
+     * the top on.
+     */
+    private void choosePack() {
         if (hoverOffered) {
             hasLast = true;
             lastFile = hoverFile;
             lastName = hoverName;
-            lastHoverMs = now;
-        } else if (hasLast && !contains(mouseX, mouseY) && now - lastHoverMs > HOVER_GRACE_MS) {
-            hasLast = false;
-        } else if (hasLast && contains(mouseX, mouseY)) {
-            lastHoverMs = now;
         }
         File file;
         String name;
@@ -845,13 +847,20 @@ public final class PlayerPreviewPanel extends Gui {
         return (mc.displayHeight - rawY - 0.5F) * screenHeight / Math.max(1, mc.displayHeight);
     }
 
-    /** One client tick: item use, effects, projectiles and the arm swing. */
+    /**
+     * One client tick: item use, effects, projectiles and the arm swing. A last hovered pack whose file was deleted
+     * gives way to the top on (checked here, not each frame, to keep file lookups off the draw).
+     */
     public void tick() {
         if (!visible()) {
             return;
         }
         ticks++;
         sim.tick();
+        subTick.tick(System.nanoTime());
+        if (hasLast && lastFile != null && !lastFile.exists()) {
+            hasLast = false;
+        }
     }
 
     /** DevShots only: forces the shown pack ({@code forced} false is nothing hovered), the mouse and a spin. */
@@ -911,6 +920,7 @@ public final class PlayerPreviewPanel extends Gui {
         framebuffer.delete();
         PreviewTextures.clear();
         shown = null;
+        hasLast = false;
         iconBounds.clear();
     }
 }
