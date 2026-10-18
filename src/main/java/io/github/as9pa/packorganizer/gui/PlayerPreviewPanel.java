@@ -320,7 +320,7 @@ public final class PlayerPreviewPanel extends Gui {
             return;
         }
         boolean depth = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
-        GlStateManager.disableDepth();   // the unmultisampled model leaves its depth in front of z 0
+        GlStateManager.disableDepth();   // the directly drawn model leaves its depth in front of z 0
         GlStateManager.bindTexture(texture);
         GlStateManager.color(1F, 1F, 1F, 1F);
         GlStateManager.enableTexture2D();
@@ -430,7 +430,7 @@ public final class PlayerPreviewPanel extends Gui {
         return i == 0 || i == name.length() ? name : codes + name.substring(i);
     }
 
-    /** Sky, model and world effects inside the multisampled target, or scissored straight to the screen without it. */
+    /** Sky, model and world effects inside the supersampled target, or scissored straight to the screen without it. */
     private void drawView(int mouseX, int mouseY, float partial, float seconds, boolean firstFrame, int scale) {
         if (viewW <= 0 || viewH <= 0) {
             return;
@@ -455,9 +455,9 @@ public final class PlayerPreviewPanel extends Gui {
         sim.world().setViewBounds((viewX - 8 - centerX) / block, (viewX + viewW + 8 - centerX) / block,
                 (feetY - (viewY + viewH + 8)) / block);
 
-        boolean multisampled = framebuffer.begin(viewX, viewY, viewW, viewH);
+        boolean offscreen = framebuffer.begin(viewX, viewY, viewW, viewH);
         try {
-            if (!multisampled) {
+            if (!offscreen) {
                 GL11.glEnable(GL11.GL_SCISSOR_TEST);
                 GL11.glScissor(viewX * scale, mc.displayHeight - (viewY + viewH) * scale, viewW * scale, viewH * scale);
                 GlStateManager.clear(GL11.GL_DEPTH_BUFFER_BIT);
@@ -474,7 +474,7 @@ public final class PlayerPreviewPanel extends Gui {
                 Log.LOG.warn("Player preview failed to draw", e);
             }
         } finally {
-            if (multisampled) {
+            if (offscreen) {
                 framebuffer.end();
             } else {
                 GL11.glDisable(GL11.GL_SCISSOR_TEST);

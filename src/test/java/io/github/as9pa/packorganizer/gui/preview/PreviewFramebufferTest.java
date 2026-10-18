@@ -38,4 +38,40 @@ public class PreviewFramebufferTest {
         int[] px = PreviewFramebuffer.pixelRect(0, 200, 10, 41, 2, 481);
         assertEquals(-1, px[1]);
     }
+
+    @Test
+    public void supersamplesWhenTwiceTheWindowFits() {
+        // The 1080p panel above: 3840x2160 fits a 16384 renderbuffer easily.
+        assertEquals(2, PreviewFramebuffer.factor(528, 922, 1920, 1080, 16384));
+    }
+
+    @Test
+    public void exactlyTheLimitStillSupersamples() {
+        assertEquals(2, PreviewFramebuffer.factor(4096, 900, 4096, 2160, 8192));
+    }
+
+    @Test
+    public void doubledRectPastTheLimitFallsBackToOne() {
+        assertEquals(1, PreviewFramebuffer.factor(4097, 900, 4097, 2160, 8192));
+        assertEquals(1, PreviewFramebuffer.factor(900, 4097, 3840, 4097, 8192));
+    }
+
+    @Test
+    public void doubledWindowPastTheLimitFallsBackEvenForASmallRect() {
+        // The viewport spans the whole window, so a wide window alone is enough.
+        assertEquals(1, PreviewFramebuffer.factor(300, 400, 5000, 2000, 8192));
+        assertEquals(1, PreviewFramebuffer.factor(300, 400, 2000, 5000, 8192));
+    }
+
+    @Test
+    public void rectTallerThanTheWindowCountsItsOwnHeight() {
+        // An odd window height can leave the rect a row taller than the window.
+        assertEquals(2, PreviewFramebuffer.factor(10, 481, 480, 480, 962));
+        assertEquals(1, PreviewFramebuffer.factor(10, 481, 480, 480, 961));
+    }
+
+    @Test
+    public void hugeSizesDoNotOverflowIntoSupersampling() {
+        assertEquals(1, PreviewFramebuffer.factor(Integer.MAX_VALUE, 1, 1, 1, Integer.MAX_VALUE));
+    }
 }

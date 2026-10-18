@@ -22,8 +22,8 @@ import org.lwjgl.util.glu.Project;
  * brightness, anything else alpha blends with the brightness as alpha.
  *
  * <p>Draws into a GUI rect whatever the current viewport is, so it works inside {@link PreviewFramebuffer} (whose
- * viewport is offset to the target) and on screen. Depth writes are off, so the model drawn next covers it. GL calls
- * only, so client thread only.
+ * viewport is offset and scaled to the target) and on screen. Depth writes are off, so the model drawn next covers
+ * it. GL calls only, so client thread only.
  */
 public final class SkyBackdrop {
     private static final float FOV = 70f;
@@ -82,9 +82,13 @@ public final class SkyBackdrop {
         boolean cull = GL11.glIsEnabled(GL11.GL_CULL_FACE);
         boolean texture = GL11.glIsEnabled(GL11.GL_TEXTURE_2D);
 
-        // The GUI projection spans the whole viewport, so the rect's pixels follow from the GUI scale.
-        int scale = new ScaledResolution(Minecraft.getMinecraft()).getScaleFactor();
-        GlStateManager.viewport(vx + x * scale, vy + vh - (y + h) * scale, w * scale, h * scale);
+        // The GUI projection spans the whole viewport, so the rect's pixels follow from the GUI scale times the
+        // viewport pixels per window pixel (PreviewFramebuffer.SUPERSAMPLE inside its target, 1 on screen).
+        Minecraft mc = Minecraft.getMinecraft();
+        int scale = new ScaledResolution(mc).getScaleFactor();
+        int sx = scale * vw / Math.max(1, mc.displayWidth);
+        int sy = scale * vh / Math.max(1, mc.displayHeight);
+        GlStateManager.viewport(vx + x * sx, vy + vh - (y + h) * sy, w * sx, h * sy);
         GlStateManager.matrixMode(GL11.GL_PROJECTION);
         GlStateManager.pushMatrix();
         GlStateManager.loadIdentity();
