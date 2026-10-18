@@ -272,7 +272,7 @@ public final class PreviewWorld {
         }
         int texture = pack.texture(ModelSpec.INVENTORY);
         boolean depth = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
-        GlStateManager.disableDepth();   // the unmultisampled model leaves its depth in front of z 0
+        GlStateManager.disableDepth();   // the directly drawn model leaves its depth in front of z 0
         GlStateManager.disableLighting();
         GlStateManager.enableTexture2D();
         GlStateManager.enableAlpha();
