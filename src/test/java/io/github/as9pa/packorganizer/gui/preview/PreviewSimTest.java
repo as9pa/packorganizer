@@ -71,8 +71,88 @@ public class PreviewSimTest {
         assertEquals(HeldItem.GOLDEN_APPLE, HeldItem.fromId("golden_apple"));
         assertEquals(HeldItem.SPLASH_POTION, HeldItem.fromId("splash_potion"));
         assertEquals(HeldItem.FISHING_ROD, HeldItem.fromId("fishing_rod"));
-        assertEquals(HeldItem.SWORD, HeldItem.fromId("nonsense"));
-        assertEquals(HeldItem.SWORD, HeldItem.fromId(null));
+        assertEquals(HeldItem.NONE, HeldItem.fromId("none"));
+        assertEquals(HeldItem.NONE, HeldItem.fromId("nonsense"));
+        assertEquals(HeldItem.NONE, HeldItem.fromId(null));
+    }
+
+    @Test
+    public void toggleSelectsThenDeselects() {
+        assertEquals(HeldItem.SWORD, HeldItem.toggle(HeldItem.NONE, HeldItem.SWORD, HeldItem.NONE));
+        assertEquals(HeldItem.NONE, HeldItem.toggle(HeldItem.SWORD, HeldItem.SWORD, HeldItem.NONE));
+        assertEquals(HeldItem.BOW, HeldItem.toggle(HeldItem.SWORD, HeldItem.BOW, HeldItem.NONE));
+        // Armor ids, where none is null.
+        assertEquals("iron", HeldItem.toggle(null, "iron", null));
+        assertNull(HeldItem.toggle("iron", "iron", null));
+        assertEquals("gold", HeldItem.toggle("iron", "gold", null));
+        // Item ids as the panel keeps them.
+        assertEquals("none", HeldItem.toggle("bow", "bow", HeldItem.NONE.id));
+        assertEquals("bow", HeldItem.toggle("none", "bow", HeldItem.NONE.id));
+    }
+
+    @Test
+    public void emptyHandRightClickDoesNothing() {
+        PreviewSim s = sim(HeldItem.NONE);
+        s.rightPress();
+        ticks(s, 25);
+        assertFalse(s.blocking());
+        assertFalse(s.aimingBow());
+        assertEquals(0f, s.swing().progress(0.5f), 0f);
+        s.rightRelease();
+        ticks(s, 5);
+        assertTrue(s.world().projectiles().isEmpty());
+        assertTrue(s.world().particles().isEmpty());
+        assertTrue(s.effects().isEmpty());
+        assertFalse(s.rodCast());
+    }
+
+    @Test
+    public void fistClickOnModelIsAHit() {
+        PreviewSim s = sim(HeldItem.NONE);
+        s.setEnchanted(true);   // nothing in the hand to carry the enchantment
+        s.leftClick(true);
+        assertEquals(0.3f, s.hurt(0), 0f);
+        s.tick();
+        assertTrue(count(s, ParticleKind.CRIT) > 0);
+        assertEquals(0, count(s, ParticleKind.MAGIC_CRIT));
+    }
+
+    @Test
+    public void fistClickOffModelSwings() {
+        PreviewSim s = sim(HeldItem.NONE);
+        s.leftClick(false);
+        assertEquals(0f, s.hurt(0), 0f);
+        assertTrue(s.swing().progress(0.5f) > 0);
+    }
+
+    @Test
+    public void emptyingTheHandStopsTheBowDraw() {
+        PreviewSim s = sim(HeldItem.BOW);
+        s.rightPress();
+        ticks(s, 20);
+        assertTrue(s.aimingBow());
+        s.setItem(HeldItem.NONE);
+        assertFalse(s.aimingBow());
+        s.rightRelease();
+        assertTrue(s.world().projectiles().isEmpty());
+    }
+
+    @Test
+    public void emptyingTheHandStopsEatingAndReelsIn() {
+        PreviewSim s = sim(HeldItem.GOLDEN_APPLE);
+        s.rightPress();
+        ticks(s, 10);
+        s.setItem(HeldItem.NONE);
+        ticks(s, 40);
+        s.rightRelease();
+        assertTrue(s.effects().isEmpty());
+
+        PreviewSim r = sim(HeldItem.FISHING_ROD);
+        r.rightPress();
+        r.rightRelease();
+        assertTrue(r.rodCast());
+        r.setItem(HeldItem.NONE);
+        assertFalse(r.rodCast());
     }
 
     @Test

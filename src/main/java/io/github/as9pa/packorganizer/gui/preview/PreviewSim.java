@@ -8,7 +8,7 @@ import java.util.Random;
 
 /**
  * What the preview player does with the held item: blocking, drawing and shooting the bow, throwing, eating, casting,
- * the effects the apple gives and sword hits on the model. One {@link #tick()} is one game tick (20 a second); the
+ * the effects the apple gives and sword and fist hits on the model. One {@link #tick()} is one game tick (20 a second); the
  * projectiles and particles live in {@link #world()}.
  */
 public final class PreviewSim {
@@ -65,9 +65,14 @@ public final class PreviewSim {
         physics.setAim(yawRad, pitchRad);
     }
 
-    /** Right button down: the sword, bow and apple start their use; the others act at once with a swing. */
+    /**
+     * Right button down: the sword, bow and apple start their use; the others act at once with a swing. The empty
+     * hand does nothing, as vanilla's right click on air.
+     */
     public void rightPress() {
         switch (item) {
+            case NONE:
+                break;
             case SWORD:
             case BOW:
             case GOLDEN_APPLE:
@@ -110,12 +115,15 @@ public final class PreviewSim {
         stopUsing();
     }
 
-    /** A sword click released on the model (not the held item) is a hit; anything else swings the arm. */
+    /**
+     * A sword or fist click released on the model (not the held item) is a hit; anything else swings the arm. Only
+     * the sword has an enchantment to give the magic crits.
+     */
     public void leftClick(boolean onModel) {
-        if (onModel && item == HeldItem.SWORD) {
+        if (onModel && (item == HeldItem.SWORD || item == HeldItem.NONE)) {
             hurtTicks = HURT_TICKS;
             physics.critBurst(false);
-            if (enchanted) {
+            if (enchanted && item == HeldItem.SWORD) {
                 physics.critBurst(true);
             }
         } else {

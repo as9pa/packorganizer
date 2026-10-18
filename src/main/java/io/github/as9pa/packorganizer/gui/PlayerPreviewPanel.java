@@ -186,7 +186,10 @@ public final class PlayerPreviewPanel extends Gui {
         buttons.addAll(topRow);
         buttons.addAll(itemRow);
         Settings settings = PackOrganizer.settings();
-        item = HeldItem.fromId(settings.previewItem);
+        // A panel is made each time the screen opens (and dropped when it closes): start bare, on the fist.
+        settings.previewArmor = null;
+        settings.previewItem = HeldItem.NONE.id;
+        item = HeldItem.NONE;
         sim.setItem(item);
         sim.setEnchanted(settings.previewEnchanted);
         DevShots.attach(this);
@@ -650,7 +653,7 @@ public final class PlayerPreviewPanel extends Gui {
         }
     }
 
-    /** The texture the button shows for an item; the sword follows the armor. */
+    /** The texture the button shows for an item; the sword follows the armor, diamond with none. */
     private static String itemPath(HeldItem held) {
         switch (held) {
             case BOW:
@@ -664,7 +667,8 @@ public final class PlayerPreviewPanel extends Gui {
             case FISHING_ROD:
                 return ModelSpec.ROD;
             default:
-                return ModelSpec.sword(PackOrganizer.settings().previewArmor);
+                String armor = PackOrganizer.settings().previewArmor;
+                return ModelSpec.sword(armor != null && ModelSpec.MATERIALS.contains(armor) ? armor : "diamond");
         }
     }
 
@@ -765,19 +769,21 @@ public final class PlayerPreviewPanel extends Gui {
         Settings settings = PackOrganizer.settings();
         switch (b.kind) {
             case ARMOR:
-                settings.previewArmor = b.id;
+                // Clicking the worn armor again takes it off.
+                settings.previewArmor = HeldItem.toggle(settings.previewArmor, b.id, null);
                 break;
             case ENCHANTED:
                 settings.previewEnchanted = !settings.previewEnchanted;
                 sim.setEnchanted(settings.previewEnchanted);
                 break;
             default:
-                settings.previewItem = b.id;
-                item = HeldItem.fromId(b.id);
+                // Clicking the held item again empties the hand.
+                settings.previewItem = HeldItem.toggle(settings.previewItem, b.id, HeldItem.NONE.id);
+                item = HeldItem.fromId(settings.previewItem);
                 sim.setItem(item);
                 break;
         }
-        // Written to disk with the rest of the settings when the screen closes.
+        // Enchanted is written to disk with the rest of the settings when the screen closes; armor and item are not.
         return true;
     }
 
@@ -813,7 +819,7 @@ public final class PlayerPreviewPanel extends Gui {
 
     /**
      * A button came up (during GuiScreen's mouse event). Right ends the item use. Left ends a spin, or else is a
-     * click in the view: with the sword on the model (not the held item) a hit, otherwise a swing.
+     * click in the view: with the sword or the fist on the model (not the held item) a hit, otherwise a swing.
      */
     public void mouseReleased(int mouseButton) {
         if (mouseButton == 1) {
@@ -833,7 +839,8 @@ public final class PlayerPreviewPanel extends Gui {
         }
         int rawX = Mouse.getEventX();
         int rawY = Mouse.getEventY();
-        boolean onModel = item == HeldItem.SWORD && ModelHitTest.hits(renderer.lastPartCorners(), guiX(rawX), guiY(rawY));
+        boolean onModel = (item == HeldItem.SWORD || item == HeldItem.NONE)
+                && ModelHitTest.hits(renderer.lastPartCorners(), guiX(rawX), guiY(rawY));
         sim.leftClick(onModel);
     }
 
