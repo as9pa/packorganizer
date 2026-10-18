@@ -42,6 +42,8 @@ public final class PreviewPhysics {
     private double minX = Double.NEGATIVE_INFINITY, maxX = Double.POSITIVE_INFINITY, minY = Double.NEGATIVE_INFINITY;
     private Projectile bobber;
     private Runnable onPearlLanded;
+    private Runnable onArrowLanded;
+    private Runnable onPotionBroke;
 
     /** EntityParticleEmitter: 3 ticks of crit bursts from the middle of the body. */
     private static final class Emitter {
@@ -73,6 +75,16 @@ public final class PreviewPhysics {
     /** Runs when a pearl lands or gives up; the listener emits {@link #portalBurst()} and starts the hurt flash. */
     public void setOnPearlLanded(Runnable listener) {
         onPearlLanded = listener;
+    }
+
+    /** Runs when an arrow sticks in the ground; one that flies off the view is removed without it. */
+    public void setOnArrowLanded(Runnable listener) {
+        onArrowLanded = listener;
+    }
+
+    /** Runs when a splash potion shatters on the ground, after its particles; one that flies off does not. */
+    public void setOnPotionBroke(Runnable listener) {
+        onPotionBroke = listener;
     }
 
     /** ItemBow.onPlayerStoppedUsing with the charge already eased (0..1); below 0.1 nothing is shot. */
@@ -307,11 +319,17 @@ public final class PreviewPhysics {
         if (p.kind == Projectile.Kind.ARROW) {
             p.shake = ARROW_SHAKE;
             p.groundTicks = 0;
+            if (onArrowLanded != null) {
+                onArrowLanded.run();
+            }
         } else if (p.kind == Projectile.Kind.PEARL) {
             gone(p);
         } else if (p.kind == Projectile.Kind.POTION) {
             shatter(p.x, p.z);
             gone(p);
+            if (onPotionBroke != null) {
+                onPotionBroke.run();
+            }
         }
     }
 

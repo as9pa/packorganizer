@@ -193,7 +193,21 @@ public class SettingsTest {
         assertEquals(Arrays.asList(
                 "Pack previews", "Transparent background", "Pack folders",
                 "Color filter", "Resolution labels", "Remember open folders",
-                "Player preview", "Pack sky backdrop", "Sky day cycle", "Show cape", "Hit tint"), labels);
+                "Player preview", "Pack sky backdrop", "Sky day cycle", "Show cape", "Hit tint",
+                "Preview sounds"), labels);
+    }
+
+    @Test
+    public void previewSoundsDefaultsOnAndRoundTripsOff() {
+        assertTrue(new Settings().previewSounds);
+        Settings s = Settings.load(json());
+        assertTrue(s.previewSounds);
+        s.previewSounds = false;
+        s.save(json());
+        assertFalse(Settings.load(json()).previewSounds);
+        s.previewSounds = true;
+        s.save(json());
+        assertTrue(Settings.load(json()).previewSounds);
     }
 
     @Test
@@ -229,6 +243,7 @@ public class SettingsTest {
         Settings s = Settings.load(json());
         assertFalse(s.listPreviews);
         assertFalse(s.previewHitTint);
+        assertTrue(s.previewSounds);
     }
 
     @Test
@@ -264,8 +279,8 @@ public class SettingsTest {
         return new boolean[] {
                 s.packPreviews, s.transparentBackground, s.packFolders, s.colorFilter,
                 s.resolutionLabels, s.rememberOpenFolders,
-                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewHitTint, s.previewEnchanted,
-                s.listPreviews
+                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewHitTint, s.previewSounds,
+                s.previewEnchanted, s.listPreviews
         };
     }
 }
