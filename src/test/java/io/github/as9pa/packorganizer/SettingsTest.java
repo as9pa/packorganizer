@@ -193,7 +193,19 @@ public class SettingsTest {
         assertEquals(Arrays.asList(
                 "Pack previews", "Transparent background", "Pack folders",
                 "Color filter", "Resolution labels", "Remember open folders",
-                "Player preview", "Pack sky backdrop", "Sky day cycle", "Show cape"), labels);
+                "Player preview", "Pack sky backdrop", "Sky day cycle", "Show cape", "Hit tint"), labels);
+    }
+
+    @Test
+    public void hitTintDefaultsOnAndRoundTripsOff() {
+        assertTrue(new Settings().previewHitTint);
+        Settings s = Settings.load(json());
+        s.previewHitTint = false;
+        s.save(json());
+        assertFalse(Settings.load(json()).previewHitTint);
+        s.previewHitTint = true;
+        s.save(json());
+        assertTrue(Settings.load(json()).previewHitTint);
     }
 
     @Test
@@ -219,7 +231,7 @@ public class SettingsTest {
         return new boolean[] {
                 s.packPreviews, s.transparentBackground, s.packFolders, s.colorFilter,
                 s.resolutionLabels, s.rememberOpenFolders,
-                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewEnchanted
+                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewHitTint, s.previewEnchanted
         };
     }
 }

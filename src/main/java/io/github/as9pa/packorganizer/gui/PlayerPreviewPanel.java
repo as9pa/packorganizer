@@ -161,7 +161,9 @@ public final class PlayerPreviewPanel extends Gui {
     private boolean pressed;
     private int pressRawX;
     private int pressRawY;
-    private float lastDragX;
+    private int lastDragRawX;
+    /** The held press became a spin; its release then ends the spin, not a click, even once the frame let go of it. */
+    private boolean spun;
     private boolean cursorHidden;
 
     // DevShots only: a forced pack (none forced is nothing hovered), mouse and spin; never set in a normal install.
@@ -285,6 +287,7 @@ public final class PlayerPreviewPanel extends Gui {
         boolean firstFrame = lastFrameNanos < 0;
         lastFrameNanos = now;
         float partial = subTick.partial(now);
+        followDrag(now);
         choosePack();
 
         Gui.drawRect(x, y, x + width, y + height, BACKDROP);
@@ -496,7 +499,7 @@ public final class PlayerPreviewPanel extends Gui {
         pose.aimingBow = sim.aimingBow();
         pose.bowFrame = sim.bowFrame();
         pose.rodCast = sim.rodCast();
-        pose.hurt = sim.hurt(partial);
+        pose.hurt = settings.previewHitTint ? sim.hurt(partial) : 0;
         pose.armor = settings.previewArmor;
         pose.item = item;
         pose.enchanted = settings.previewEnchanted;
@@ -755,9 +758,10 @@ public final class PlayerPreviewPanel extends Gui {
         if (b == null) {
             if (inView(mouseX, mouseY)) {
                 pressed = true;
+                spun = false;
                 pressRawX = Mouse.getEventX();
                 pressRawY = Mouse.getEventY();
-                lastDragX = guiX(pressRawX);
+                lastDragRawX = pressRawX;
             } else {
                 pressed = false;
                 sim.leftClick(false);
@@ -795,26 +799,32 @@ public final class PlayerPreviewPanel extends Gui {
     }
 
     /**
-     * The mouse moved with a button held (during GuiScreen's mouse event): a left press in the view that moves more
-     * than {@link #SPIN_START_PX} turns into a spin at {@link #SPIN_PER_PX} degrees per GUI px.
+     * Each frame while a left press in the view is held, the live pointer turns the model: GuiScreen hands out mouse
+     * events only on the 20 Hz client tick, which stepped the spin, while {@link Mouse#getX()} is fresh after every
+     * Display.update and leaves the event queue alone. A press that moves more than {@link #SPIN_START_PX} window px
+     * turns into a spin at {@link #SPIN_PER_PX} degrees per GUI px. The first frame to see the button up hands the
+     * model to the spring; the release event that follows on the next tick then ends the press without a click.
      */
-    public void mouseDragged(int mouseButton) {
-        if (!pressed || mouseButton != 0) {
+    private void followDrag(long now) {
+        if (!pressed) {
             return;
         }
-        int rawX = Mouse.getEventX();
-        int rawY = Mouse.getEventY();
-        if (!spin.dragging()) {
+        if (!Mouse.isButtonDown(0)) {
+            spin.release(now);
+            return;
+        }
+        int rawX = Mouse.getX();
+        if (!spun) {
             int dx = rawX - pressRawX;
-            int dy = rawY - pressRawY;
+            int dy = Mouse.getY() - pressRawY;
             if (dx * dx + dy * dy <= SPIN_START_PX * SPIN_START_PX) {
                 return;
             }
-            spin.press();
+            spun = true;
+            spin.press(now);
         }
-        float gx = guiX(rawX);
-        spin.drag((gx - lastDragX) * SPIN_PER_PX, System.nanoTime());
-        lastDragX = gx;
+        spin.drag(SpinSpring.dragDegrees(lastDragRawX, rawX, screenWidth, mc.displayWidth, SPIN_PER_PX), now);
+        lastDragRawX = rawX;
     }
 
     /**
@@ -830,8 +840,9 @@ public final class PlayerPreviewPanel extends Gui {
             return;
         }
         pressed = false;
-        if (spin.dragging()) {
-            spin.release(System.nanoTime());
+        if (spun) {
+            spun = false;
+            spin.release(System.nanoTime());   // nothing left to do once a frame saw the button up first
             return;
         }
         if (!visible()) {

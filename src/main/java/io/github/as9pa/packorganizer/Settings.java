@@ -43,6 +43,7 @@ public final class Settings {
     public boolean playerPreview = true;
     public boolean skyBackdrop = true;
     public boolean skyCycle = true;
+    public boolean previewHitTint = true;
     public boolean showCape = true;
     /** Preview armor from ARMORS, null for none. Not saved: each opening of the screen starts with no armor. */
     public String previewArmor = null;
@@ -87,7 +88,8 @@ public final class Settings {
             new Switch("Player preview", s -> s.playerPreview, (s, v) -> s.playerPreview = v),
             new Switch("Pack sky backdrop", s -> s.skyBackdrop, (s, v) -> s.skyBackdrop = v),
             new Switch("Sky day cycle", s -> s.skyCycle, (s, v) -> s.skyCycle = v),
-            new Switch("Show cape", s -> s.showCape, (s, v) -> s.showCape = v)));
+            new Switch("Show cape", s -> s.showCape, (s, v) -> s.showCape = v),
+            new Switch("Hit tint", s -> s.previewHitTint, (s, v) -> s.previewHitTint = v)));
 
     private static Settings current;
     private static File currentFile;
@@ -149,6 +151,7 @@ public final class Settings {
         s.playerPreview = bool(root, "playerPreview", s.playerPreview);
         s.skyBackdrop = bool(root, "skyBackdrop", s.skyBackdrop);
         s.skyCycle = bool(root, "skyCycle", s.skyCycle);
+        s.previewHitTint = bool(root, "previewHitTint", s.previewHitTint);
         s.showCape = bool(root, "showCape", s.showCape);
         s.previewEnchanted = bool(root, "previewEnchanted", s.previewEnchanted);
         return s;
@@ -173,6 +176,7 @@ public final class Settings {
         root.addProperty("playerPreview", playerPreview);
         root.addProperty("skyBackdrop", skyBackdrop);
         root.addProperty("skyCycle", skyCycle);
+        root.addProperty("previewHitTint", previewHitTint);
         root.addProperty("showCape", showCape);
         root.addProperty("previewEnchanted", previewEnchanted);
 
