@@ -3,10 +3,12 @@ package io.github.as9pa.packorganizer.mixin;
 import io.github.as9pa.packorganizer.EntryExtension;
 import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.filter.PreviewSpec;
+import io.github.as9pa.packorganizer.gui.PacksToolbar;
 import io.github.as9pa.packorganizer.gui.PlayerPreviewPanel;
 import io.github.as9pa.packorganizer.gui.PreviewCache;
 import io.github.as9pa.packorganizer.gui.RowBadge;
 import io.github.as9pa.packorganizer.gui.RowLayout;
+import io.github.as9pa.packorganizer.gui.RowLook;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
@@ -32,7 +34,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Indents rows by folder depth, draws the resolution badge on every row, and shortens the name
  * trim so the badge and indent never overlap the text. While a Found row is hovered and its preview is
- * ready, the name and description give way to a 2x8 grid of the pack's textures.
+ * ready, the name and description give way to a 2x8 grid of the pack's textures. In Previews mode
+ * (listPreviews) every on-screen Found row shows its grid instead, and the hovered row its text; see {@link RowLook}.
  */
 @Mixin(ResourcePackListEntry.class)
 public abstract class MixinResourcePackListEntry implements RowLayout {
@@ -50,6 +53,8 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     @Unique private int packorganizer$rowDepth;
     /** Set at drawEntry HEAD, cleared at RETURN: the preview to draw instead of the text, or null. */
     @Unique private PreviewCache.Preview packorganizer$preview;
+    /** Set at drawEntry HEAD with the preview: true when the row's look drops the badge. */
+    @Unique private boolean packorganizer$hideBadge;
 
     @Override
     public void packorganizer$setDepth(int depth) {
@@ -95,25 +100,34 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     }
 
     /**
-     * isSelected is the hover flag. A hovered pack row is offered to the player preview. The first hover starts the
-     * background load; text hides once it is ready.
+     * isSelected is the hover flag. A hovered pack row is offered to the player preview. The first hover (or, in
+     * Previews mode, the first frame on screen) starts the background load; RowLook picks text or grid once it is
+     * ready. Off-screen rows request nothing, since vanilla draws every row of the list each frame.
      */
     @Inject(method = "drawEntry", at = @At("HEAD"))
     private void packorganizer$lookUpPreview(int slotIndex, int x, int y, int listWidth, int slotHeight,
                                              int mouseX, int mouseY, boolean isSelected, CallbackInfo ci) {
         packorganizer$preview = null;
+        packorganizer$hideBadge = false;
         if (isSelected) {
             packorganizer$offerHover();
         }
-        if (!isSelected || !PackOrganizer.settings().packPreviews
+        boolean listPreviews = PackOrganizer.settings().listPreviews;
+        boolean wanted = isSelected || listPreviews && RowLook.onScreen(y, slotHeight,
+                PacksToolbar.LIST_TOP, resourcePacksGUI.height - PacksToolbar.LIST_BOTTOM_INSET);
+        if (!wanted || !PackOrganizer.settings().packPreviews
                 || !((Object) this instanceof ResourcePackListEntryFound)) {
             return;
         }
         ResourcePackRepository.Entry pack = ((ResourcePackListEntryFound) (Object) this).func_148318_i();
         // Defensive: if the Entry mixin did not apply, there is no pack file to read.
-        if (pack instanceof EntryExtension && ((EntryExtension) pack).packorganizer$file() != null) {
-            packorganizer$preview = PreviewCache.get(((EntryExtension) pack).packorganizer$file());
+        if (!(pack instanceof EntryExtension) || ((EntryExtension) pack).packorganizer$file() == null) {
+            return;
         }
+        PreviewCache.Preview preview = PreviewCache.get(((EntryExtension) pack).packorganizer$file());
+        RowLook look = RowLook.of(listPreviews, isSelected, preview != null);
+        packorganizer$preview = look.strip ? preview : null;
+        packorganizer$hideBadge = !look.label;
     }
 
     /** Found rows offer their pack file, the Default row offers no file (the vanilla look); folder rows nothing. */
@@ -151,12 +165,14 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
             RowLayout.drawGuides(originalX, y, slotHeight, packorganizer$rowDepth);
         }
         PreviewCache.Preview preview = packorganizer$preview;
+        boolean hideBadge = packorganizer$hideBadge;
         packorganizer$preview = null;
+        packorganizer$hideBadge = false;
         if (preview != null) {
             packorganizer$drawPreview(preview, x, y, originalX + listWidth, slotHeight);
-            return;
         }
-        if (!PackOrganizer.settings().resolutionLabels) {
+        // Drawn after the grid so the badge stays on top where the two meet.
+        if (hideBadge || !PackOrganizer.settings().resolutionLabels) {
             return;
         }
         String badge = RowBadge.text((ResourcePackListEntry) (Object) this);

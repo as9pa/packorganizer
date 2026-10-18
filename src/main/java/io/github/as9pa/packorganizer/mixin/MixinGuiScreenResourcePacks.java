@@ -28,7 +28,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GuiScreenResourcePacks.class)
 public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
     private static final int LIST_WIDTH = 200;
-    private static final int LIST_BOTTOM_INSET = 51;
 
     @Shadow private List<ResourcePackListEntry> availableResourcePacks;
     @Shadow private List<ResourcePackListEntry> selectedResourcePacks;
@@ -68,9 +67,9 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         }
 
         // setDimensions resets left/right, so re-apply the x bounds vanilla set in initGui.
-        availableResourcePacksList.setDimensions(LIST_WIDTH, height, PacksToolbar.LIST_TOP, height - LIST_BOTTOM_INSET);
+        availableResourcePacksList.setDimensions(LIST_WIDTH, height, PacksToolbar.LIST_TOP, height - PacksToolbar.LIST_BOTTOM_INSET);
         availableResourcePacksList.setSlotXBoundsFromLeft(left);
-        selectedResourcePacksList.setDimensions(LIST_WIDTH, height, PacksToolbar.LIST_TOP, height - LIST_BOTTOM_INSET);
+        selectedResourcePacksList.setDimensions(LIST_WIDTH, height, PacksToolbar.LIST_TOP, height - PacksToolbar.LIST_BOTTOM_INSET);
         selectedResourcePacksList.setSlotXBoundsFromLeft(width / 2 + 4);
 
         ((FilteredList) availableResourcePacksList).packorganizer$setView(packorganizer$toolbar.visible());
