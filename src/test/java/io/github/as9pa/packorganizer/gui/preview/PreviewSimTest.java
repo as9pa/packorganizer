@@ -427,11 +427,18 @@ public class PreviewSimTest {
 
     @Test
     public void appleCrumbsEveryFourTicksThenSixteenWithEffects() {
-        PreviewSim s = sim(HeldItem.GOLDEN_APPLE);
+        Heard out = new Heard();
+        PreviewSim s = heard(HeldItem.GOLDEN_APPLE, out);
         s.rightPress();
         for (int t = 1; t <= 31; t++) {
+            int before = out.events.size();
             s.tick();
-            assertEquals("tick " + t, t >= 8 && t % 4 == 0 ? 5 : 0, newCracks(s));
+            boolean crumbTick = t >= 9 && t % 4 == 1;
+            assertEquals("tick " + t, crumbTick ? 5 : 0, newCracks(s));
+            if (crumbTick) {
+                assertEquals("tick " + t, before + 1, out.events.size());
+                assertEquals("tick " + t, PreviewSound.EAT, out.events.get(before));
+            }
             assertTrue(s.effects().isEmpty());
         }
         s.tick();
