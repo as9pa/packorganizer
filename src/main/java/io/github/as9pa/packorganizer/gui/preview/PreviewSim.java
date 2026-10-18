@@ -263,17 +263,17 @@ public final class PreviewSim {
         effects.add(effect);
     }
 
-    /** EntityPlayer.onUpdate for food in use: crumbs every 4 ticks once 25 or fewer remain, then the last bite. */
+    /** EntityPlayer.onUpdate for food in use: crumbs with each eat sound every 4 ticks once 25 or fewer remain, then the last bite. */
     private void eat() {
         int remaining = EAT_TICKS - useTicks;
         // The eat sound tests itemInUseCount as onUpdate does, before this tick takes one off: remaining + 1.
         int count = remaining + 1;
         if (count <= 25 && count % 4 == 0) {
             eatSound();
-        }
-        if (remaining > 0 && remaining <= 25 && remaining % 4 == 0) {
+            // EntityPlayer.updateItemUse spawns the crumbs and plays the eat sound in the same tick.
             physics.crumbs(5, EYE_Y);
-        } else if (remaining <= 0) {
+        }
+        if (remaining <= 0) {
             physics.crumbs(16, EYE_Y);
             // onItemUseFinish: updateItemUse(stack, 16) eats once more, then ItemFood burps.
             eatSound();
