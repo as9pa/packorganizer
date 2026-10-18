@@ -7,6 +7,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +27,16 @@ public final class PackTextureReader {
      * their first frame and the heart cropped from icons.png. A cell is null when the file is missing or unreadable.
      */
     public static BufferedImage[] read(File pack) {
-        BufferedImage[] out = new BufferedImage[PreviewSpec.CELLS];
-        each(pack, PreviewSpec.PATHS, (i, in) -> out[i] = prepare(i, decode(in)));
+        return Arrays.copyOf(readLayers(pack), PreviewSpec.CELLS);
+    }
+
+    /**
+     * Like {@link #read} but over {@link PreviewSpec#LAYER_PATHS}: the cells followed by the potion overlay at
+     * {@link PreviewSpec#OVERLAY}, cut to its first frame, or null when the pack has none.
+     */
+    public static BufferedImage[] readLayers(File pack) {
+        BufferedImage[] out = new BufferedImage[PreviewSpec.LAYER_PATHS.size()];
+        each(pack, PreviewSpec.LAYER_PATHS, (i, in) -> out[i] = prepare(i, decode(in)));
         return out;
     }
 

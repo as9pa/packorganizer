@@ -1,6 +1,7 @@
 package io.github.as9pa.packorganizer.filter;
 
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -13,6 +14,12 @@ public final class PreviewSpec {
     public static final int CELLS = 16;
     /** Index of the heart cell in {@link #PATHS}. */
     public static final int HEART = 12;
+    /** Index of the potion cell in {@link #PATHS}; its path is the splash bottle, drawn over {@link #POTION_OVERLAY}. */
+    public static final int POTION = 11;
+    /** The potion's liquid layer, tinted by the potion color under the bottle. */
+    public static final String POTION_OVERLAY = ROOT + "items/potion_overlay.png";
+    /** Index of {@link #POTION_OVERLAY} in {@link #LAYER_PATHS}, just past the cells. */
+    public static final int OVERLAY = CELLS;
     public static final int COLUMNS = 8;
     public static final int ROWS = 2;
     public static final int MAX_CELL = 64;
@@ -38,7 +45,16 @@ public final class PreviewSpec {
             ROOT + "items/arrow.png",
             ROOT + "items/snowball.png"));
 
+    /** Every texture a preview reads: {@link #PATHS} then {@link #POTION_OVERLAY} at {@link #OVERLAY}. */
+    public static final List<String> LAYER_PATHS = Collections.unmodifiableList(layerPaths());
+
     private PreviewSpec() {}
+
+    private static List<String> layerPaths() {
+        List<String> out = new ArrayList<>(PATHS);
+        out.add(POTION_OVERLAY);
+        return out;
+    }
 
     /** Heart rectangle {x, y, w, h} in an icons.png of the given width: (52,0,9,9) scaled by width/256. */
     public static int[] heartCrop(int iconsWidth) {
