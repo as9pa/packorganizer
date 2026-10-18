@@ -73,6 +73,25 @@ public class PackTextureReaderTest {
         assertNotNull(PackTextureReader.read(new File(tmp.getRoot(), "absent.zip")));
     }
 
+    @Test
+    public void readLayersAddsThePotionOverlayAfterTheCells() throws Exception {
+        Map<String, byte[]> e = new LinkedHashMap<>();
+        e.put(POTION, TestPacks.png(32, 32));
+        e.put(PreviewSpec.POTION_OVERLAY, TestPacks.png(16, 48));
+        File pack = TestPacks.zip(new File(tmp.getRoot(), "potion.zip"), e);
+
+        BufferedImage[] layers = PackTextureReader.readLayers(pack);
+        assertEquals(PreviewSpec.CELLS + 1, layers.length);
+        assertEquals(32, layers[PreviewSpec.POTION].getWidth());
+        assertEquals(16, layers[PreviewSpec.OVERLAY].getWidth());
+        assertEquals(16, layers[PreviewSpec.OVERLAY].getHeight());
+        assertEquals(PreviewSpec.CELLS, PackTextureReader.read(pack).length);
+
+        File dir = tmp.newFolder("bottle-only");
+        TestPacks.write(new File(dir, POTION), TestPacks.png(16, 16));
+        assertNull(PackTextureReader.readLayers(dir)[PreviewSpec.OVERLAY]);
+    }
+
     private static final String ARMOR = "models/armor/diamond_layer_1.png";
     private static final String PULL = "items/bow_pulling_0.png";
     private static final String GLINT = "misc/enchanted_item_glint.png";

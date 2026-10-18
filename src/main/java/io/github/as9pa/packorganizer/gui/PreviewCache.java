@@ -2,6 +2,7 @@ package io.github.as9pa.packorganizer.gui;
 
 import io.github.as9pa.packorganizer.Log;
 import io.github.as9pa.packorganizer.filter.PackTextureReader;
+import io.github.as9pa.packorganizer.filter.PotionIcon;
 import io.github.as9pa.packorganizer.filter.PreviewSpec;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -39,7 +40,10 @@ public final class PreviewCache {
     /** Access-ordered so the first entry is the least recently hovered. */
     private static final LinkedHashMap<File, Slot> CACHE = new LinkedHashMap<>(16, 0.75f, true);
 
-    /** Default pack textures, loaded once on the loader thread; null cells when the default lacks them. */
+    /**
+     * Default pack textures in {@link PreviewSpec#LAYER_PATHS} order, the raw potion layers included, loaded once on
+     * the loader thread; null entries when the default lacks them.
+     */
     private static BufferedImage[] defaults;
 
     private PreviewCache() {}
@@ -114,8 +118,9 @@ public final class PreviewCache {
 
     private static void load(File pack, IResourcePack defaultPack, Slot slot) {
         try {
-            BufferedImage[] cells = PackTextureReader.read(pack);
+            BufferedImage[] own = PackTextureReader.readLayers(pack);
             BufferedImage[] fallback = defaults(defaultPack);
+            BufferedImage[] cells = Arrays.copyOf(own, PreviewSpec.CELLS);
             boolean[] missing = new boolean[PreviewSpec.CELLS];
             for (int i = 0; i < PreviewSpec.CELLS; i++) {
                 if (cells[i] == null) {
@@ -123,6 +128,10 @@ public final class PreviewCache {
                     cells[i] = fallback[i];
                 }
             }
+            int potion = PreviewSpec.POTION;
+            int overlay = PreviewSpec.OVERLAY;
+            missing[potion] = own[potion] == null && own[overlay] == null;
+            cells[potion] = PotionIcon.healing(own[potion], own[overlay], fallback[potion], fallback[overlay]);
             int cell = PreviewSpec.cellSize(Arrays.asList(cells));
             BufferedImage atlas = new BufferedImage(PreviewSpec.atlasWidth(cell), PreviewSpec.atlasHeight(cell),
                     BufferedImage.TYPE_INT_ARGB);
@@ -146,9 +155,9 @@ public final class PreviewCache {
         if (defaults != null) {
             return defaults;
         }
-        BufferedImage[] out = new BufferedImage[PreviewSpec.CELLS];
-        for (int i = 0; i < PreviewSpec.CELLS; i++) {
-            String path = PreviewSpec.PATHS.get(i).substring(ASSETS.length());
+        BufferedImage[] out = new BufferedImage[PreviewSpec.LAYER_PATHS.size()];
+        for (int i = 0; i < out.length; i++) {
+            String path = PreviewSpec.LAYER_PATHS.get(i).substring(ASSETS.length());
             try (InputStream in = defaultPack.getInputStream(new ResourceLocation("minecraft", path))) {
                 BufferedImage img = in == null ? null : ImageIO.read(in);
                 if (img != null) {
