@@ -35,6 +35,8 @@ import net.minecraft.client.resources.ResourcePackRepository;
 public final class PacksToolbar {
     public static final int TOOLBAR_Y = 28;
     public static final int LIST_TOP = 52;
+    /** Both lists end this far above the screen's bottom edge. */
+    public static final int LIST_BOTTOM_INSET = 51;
     public static final int WIDTH = 408;
     public static final int HEIGHT = 20;
     public static final int SEARCH_WIDTH = 140;
