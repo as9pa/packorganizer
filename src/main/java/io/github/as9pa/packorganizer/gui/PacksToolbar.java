@@ -2,6 +2,7 @@ package io.github.as9pa.packorganizer.gui;
 
 import io.github.as9pa.packorganizer.EntryExtension;
 import io.github.as9pa.packorganizer.PackOrganizer;
+import io.github.as9pa.packorganizer.Settings;
 import io.github.as9pa.packorganizer.filter.ColorFeatures;
 import io.github.as9pa.packorganizer.filter.ColorScore;
 import io.github.as9pa.packorganizer.filter.FolderState;
@@ -24,7 +25,8 @@ import net.minecraft.client.resources.ResourcePackListEntryFound;
 import net.minecraft.client.resources.ResourcePackRepository;
 
 /**
- * The row above the two lists: search box, resolution chips, match counter. Owns the filtered view
+ * The row above the two lists: search box, resolution chips and the Previews toggle, with the match
+ * counter on the screen title's line above its right end. Owns the filtered view
  * that the Available list widget reads through. With packFolders on, that view is the folder tree:
  * folder rows (cached per path) and indented packs. With colorFilter on it also owns the color wheel:
  * docked left of the lists when there is room, else opened as a popup from a "Color" chip at the
@@ -40,6 +42,10 @@ public final class PacksToolbar {
     public static final int SEARCH_ID = 199;
     public static final int CHIP_ID_BASE = 100;
     public static final int COLOR_ID = 198;
+    public static final int PREVIEWS_ID = 197;
+    /** The counter's y above the toolbar: on the line vanilla draws the screen title on (y 16), since the toggle fills the row. */
+    private static final int COUNTER_ABOVE = 12;
+    private static final String PREVIEWS_LABEL = "Previews";
     /** The wheel docks left of the lists when they start at least this far from the screen edge. */
     private static final int DOCK_MIN_LEFT = 136;
     private static final int PANEL_GAP = 8;
@@ -61,6 +67,10 @@ public final class PacksToolbar {
     private final List<PackResolution> snapshotResolutions = new ArrayList<>();
     private final List<PackColors> snapshotColors = new ArrayList<>();
     private final List<ChipButton> chips = new ArrayList<>();
+    /** On/off for listPreviews; looks like a chip but is not one of the mutually exclusive filters. */
+    private final ChipButton previewsToggle;
+    /** The chips, then the toggle: everything the screen adds to its buttonList. */
+    private final List<ChipButton> buttons = new ArrayList<>();
     private final Map<String, FolderRowEntry> folderRows = new HashMap<>();
     /** Open state of each folder row as last shown; the row flips its own arrow before telling us. */
     private final Map<String, Boolean> shownOpen = new HashMap<>();
@@ -123,11 +133,16 @@ public final class PacksToolbar {
             chips.add(button);
             x += width + CHIP_GAP;
         }
+        // Right of Overlay; with the vanilla font it ends 3 px inside WIDTH.
+        previewsToggle = new ChipButton(PREVIEWS_ID, x, top, font.getStringWidth(PREVIEWS_LABEL) + 10, PREVIEWS_LABEL);
+        previewsToggle.setActive(PackOrganizer.settings().listPreviews);
+        buttons.addAll(chips);
+        buttons.add(previewsToggle);
     }
 
-    /** Add these to the screen's buttonList; the screen draws and clicks them. */
+    /** Add these (the chips, then the Previews toggle) to the screen's buttonList; the screen draws and clicks them. */
     public List<ChipButton> chips() {
-        return chips;
+        return buttons;
     }
 
     /** The "Color" chip to add to the screen's buttonList, or null when there is none. */
@@ -338,10 +353,18 @@ public final class PacksToolbar {
         return pack instanceof EntryExtension ? ((EntryExtension) pack).packorganizer$colors() : null;
     }
 
-    /** True (and the filter updated, or the popup toggled) when the button is one of our chips. */
+    /** True (and the filter updated, the popup toggled or Previews flipped and saved) when the button is one of ours. */
     public boolean activate(GuiButton button) {
         if (colorChip != null && button == colorChip) {
             popupOpen = !popupOpen;
+            return true;
+        }
+        if (button == previewsToggle) {
+            // Not a filter: the view, the active chip, the search and the folders all stay as they are.
+            Settings settings = PackOrganizer.settings();
+            settings.listPreviews = !settings.listPreviews;
+            previewsToggle.setActive(settings.listPreviews);
+            Settings.saveNow();
             return true;
         }
         if (!(button instanceof ChipButton)) {
@@ -426,7 +449,7 @@ public final class PacksToolbar {
             font.drawStringWithShadow(PLACEHOLDER, searchLeft + 5, top + 6, PLACEHOLDER_COLOUR);
         }
         String counter = matchCount + " of " + source.size();
-        font.drawStringWithShadow(counter, left + WIDTH - font.getStringWidth(counter), top + 6, COUNTER_COLOUR);
+        font.drawStringWithShadow(counter, left + WIDTH - font.getStringWidth(counter), top - COUNTER_ABOVE, COUNTER_COLOUR);
         if (panelShown()) {
             panel.draw(mouseX, mouseY);
         }

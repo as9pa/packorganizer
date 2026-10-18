@@ -50,6 +50,8 @@ public final class Settings {
     /** Preview item from ITEMS, or "none" for the empty hand. Not saved: each opening starts on the fist. */
     public String previewItem = "none";
     public boolean previewEnchanted = false;
+    /** Pack list rows show item previews. Set by the toolbar's Previews toggle; not on the settings screen. */
+    public boolean listPreviews = false;
 
     public static final List<String> ARMORS = Collections.unmodifiableList(Arrays.asList(
             "leather", "chainmail", "iron", "gold", "diamond"));
@@ -154,6 +156,7 @@ public final class Settings {
         s.previewHitTint = bool(root, "previewHitTint", s.previewHitTint);
         s.showCape = bool(root, "showCape", s.showCape);
         s.previewEnchanted = bool(root, "previewEnchanted", s.previewEnchanted);
+        s.listPreviews = bool(root, "listPreviews", s.listPreviews);
         return s;
     }
 
@@ -179,6 +182,7 @@ public final class Settings {
         root.addProperty("previewHitTint", previewHitTint);
         root.addProperty("showCape", showCape);
         root.addProperty("previewEnchanted", previewEnchanted);
+        root.addProperty("listPreviews", listPreviews);
 
         File tmp = new File(file.getPath() + ".tmp");
         try {

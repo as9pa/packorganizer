@@ -209,6 +209,39 @@ public class SettingsTest {
     }
 
     @Test
+    public void listPreviewsDefaultsOffAndRoundTrips() throws IOException {
+        assertFalse(new Settings().listPreviews);
+        Settings s = Settings.load(json());
+        assertFalse(s.listPreviews);
+        s.listPreviews = true;
+        s.save(json());
+        String text = new String(Files.readAllBytes(json().toPath()), StandardCharsets.UTF_8);
+        assertTrue(text.contains("\"listPreviews\""));
+        assertTrue(Settings.load(json()).listPreviews);
+        s.listPreviews = false;
+        s.save(json());
+        assertFalse(Settings.load(json()).listPreviews);
+    }
+
+    @Test
+    public void oldSettingsWithoutListPreviewsLoadItOff() throws IOException {
+        writeJson("{\"packPreviews\": true, \"previewHitTint\": false, \"showCape\": true}");
+        Settings s = Settings.load(json());
+        assertFalse(s.listPreviews);
+        assertFalse(s.previewHitTint);
+    }
+
+    @Test
+    public void listPreviewsIsNotOnTheSettingsScreen() {
+        // The owner chose the toolbar toggle only; no switch may touch the field.
+        for (Settings.Switch sw : Settings.SWITCHES) {
+            Settings s = new Settings();
+            sw.set(s, !sw.get(s));
+            assertFalse("switch " + sw.label, s.listPreviews);
+        }
+    }
+
+    @Test
     public void everySwitchTogglesOnlyItsOwnField() {
         for (int i = 0; i < Settings.SWITCHES.size(); i++) {
             Settings s = new Settings();
@@ -226,12 +259,13 @@ public class SettingsTest {
         }
     }
 
-    /** Every boolean setting in a fixed order, including Enchanted which has no switch. */
+    /** Every boolean setting in a fixed order, including Enchanted and list previews which have no switch. */
     private static boolean[] snapshot(Settings s) {
         return new boolean[] {
                 s.packPreviews, s.transparentBackground, s.packFolders, s.colorFilter,
                 s.resolutionLabels, s.rememberOpenFolders,
-                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewHitTint, s.previewEnchanted
+                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewHitTint, s.previewEnchanted,
+                s.listPreviews
         };
     }
 }
