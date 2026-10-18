@@ -202,9 +202,6 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         if (packorganizer$toolbar != null) {
             packorganizer$toolbar.mouseDragged(mouseX, mouseY);
         }
-        if (packorganizer$playerPreview != null) {
-            packorganizer$playerPreview.mouseDragged(clickedMouseButton);
-        }
     }
 
     @Override

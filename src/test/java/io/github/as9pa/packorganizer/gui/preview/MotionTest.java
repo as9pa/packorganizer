@@ -54,7 +54,7 @@ public class MotionTest {
     @Test
     public void springSettlesWithoutOvershootFromRest() {
         SpinSpring s = new SpinSpring();
-        s.press();
+        s.press(0);
         s.drag(120, 0);
         s.release(200_000_000L);
         float min = 999;
@@ -70,7 +70,7 @@ public class MotionTest {
     @Test
     public void springTakesShortWayRound() {
         SpinSpring s = new SpinSpring();
-        s.press();
+        s.press(0);
         s.drag(300, 0);
         s.release(500_000_000L);
         assertEquals(-60, s.angle(), 1e-3);
@@ -79,7 +79,7 @@ public class MotionTest {
     @Test
     public void flickKeepsVelocity() {
         SpinSpring s = new SpinSpring();
-        s.press();
+        s.press(0);
         for (int i = 1; i <= 5; i++) s.drag(10, i * 16_000_000L);
         s.release(5 * 16_000_000L + 10_000_000L);
         s.step(0.016f);
