@@ -2,6 +2,7 @@ package io.github.as9pa.packorganizer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -132,8 +133,8 @@ public class SettingsTest {
         assertTrue(s.skyBackdrop);
         assertTrue(s.skyCycle);
         assertTrue(s.showCape);
-        assertEquals("diamond", s.previewArmor);
-        assertEquals("sword", s.previewItem);
+        assertNull(s.previewArmor);
+        assertEquals("none", s.previewItem);
         assertFalse(s.previewEnchanted);
     }
 
@@ -154,17 +155,33 @@ public class SettingsTest {
         assertFalse(r.skyBackdrop);
         assertFalse(r.skyCycle);
         assertFalse(r.showCape);
-        assertEquals("gold", r.previewArmor);
-        assertEquals("bow", r.previewItem);
         assertTrue(r.previewEnchanted);
+        // The preview always opens bare and on the fist, so armor and item are never written.
+        assertNull(r.previewArmor);
+        assertEquals("none", r.previewItem);
     }
 
     @Test
-    public void unknownArmorOrItemFallsBack() throws IOException {
-        writeJson("{\"previewArmor\": \"netherite\", \"previewItem\": 42}");
+    public void armorAndItemAreNotSaved() throws IOException {
+        Settings s = new Settings();
+        s.previewArmor = "gold";
+        s.previewItem = "bow";
+        s.save(json());
+        String text = new String(Files.readAllBytes(json().toPath()), StandardCharsets.UTF_8);
+        assertFalse(text.contains("previewArmor"));
+        assertFalse(text.contains("previewItem"));
+        assertTrue(text.contains("previewEnchanted"));
+    }
+
+    @Test
+    public void oldArmorAndItemKeysAreIgnored() throws IOException {
+        writeJson("{\"previewArmor\": \"gold\", \"previewItem\": \"bow\", \"previewEnchanted\": true,"
+                + " \"showCape\": false}");
         Settings r = Settings.load(json());
-        assertEquals("diamond", r.previewArmor);
-        assertEquals("sword", r.previewItem);
+        assertNull(r.previewArmor);
+        assertEquals("none", r.previewItem);
+        assertTrue(r.previewEnchanted);
+        assertFalse(r.showCape);
     }
 
     @Test

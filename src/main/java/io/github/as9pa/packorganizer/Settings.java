@@ -44,8 +44,10 @@ public final class Settings {
     public boolean skyBackdrop = true;
     public boolean skyCycle = true;
     public boolean showCape = true;
-    public String previewArmor = "diamond";
-    public String previewItem = "sword";
+    /** Preview armor from ARMORS, null for none. Not saved: each opening of the screen starts with no armor. */
+    public String previewArmor = null;
+    /** Preview item from ITEMS, or "none" for the empty hand. Not saved: each opening starts on the fist. */
+    public String previewItem = "none";
     public boolean previewEnchanted = false;
 
     public static final List<String> ARMORS = Collections.unmodifiableList(Arrays.asList(
@@ -148,8 +150,6 @@ public final class Settings {
         s.skyBackdrop = bool(root, "skyBackdrop", s.skyBackdrop);
         s.skyCycle = bool(root, "skyCycle", s.skyCycle);
         s.showCape = bool(root, "showCape", s.showCape);
-        s.previewArmor = oneOf(root, "previewArmor", ARMORS, s.previewArmor);
-        s.previewItem = oneOf(root, "previewItem", ITEMS, s.previewItem);
         s.previewEnchanted = bool(root, "previewEnchanted", s.previewEnchanted);
         return s;
     }
@@ -174,8 +174,6 @@ public final class Settings {
         root.addProperty("skyBackdrop", skyBackdrop);
         root.addProperty("skyCycle", skyCycle);
         root.addProperty("showCape", showCape);
-        root.addProperty("previewArmor", previewArmor);
-        root.addProperty("previewItem", previewItem);
         root.addProperty("previewEnchanted", previewEnchanted);
 
         File tmp = new File(file.getPath() + ".tmp");
@@ -202,15 +200,6 @@ public final class Settings {
         JsonElement e = root.get(key);
         if (e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean()) {
             return e.getAsBoolean();
-        }
-        return fallback;
-    }
-
-    /** The string at key when it is one of allowed, else fallback. */
-    private static String oneOf(JsonObject root, String key, List<String> allowed, String fallback) {
-        JsonElement e = root.get(key);
-        if (e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString() && allowed.contains(e.getAsString())) {
-            return e.getAsString();
         }
         return fallback;
     }

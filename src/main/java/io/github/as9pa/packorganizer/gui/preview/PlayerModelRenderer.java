@@ -85,9 +85,9 @@ public final class PlayerModelRenderer {
         /** Red mixed into body and armor, 0..0.3 (vanilla's hurt flash is 0.3). */
         public float hurt;
         /** Armor material from {@link ModelSpec#MATERIALS}; also picks the sword. Null draws no armor. */
-        public String armor = "diamond";
-        /** Null holds nothing. */
-        public HeldItem item = HeldItem.SWORD;
+        public String armor;
+        /** {@link HeldItem#NONE} (or null) holds nothing, with the vanilla empty arm. */
+        public HeldItem item = HeldItem.NONE;
         /** Glint on sword, bow and armor; drawn by the glint passes, not here. */
         public boolean enchanted;
         /** The glint clock in ms; the armor glint runs on it in ticks (ms / 50), as the mock's. */
@@ -154,7 +154,7 @@ public final class PlayerModelRenderer {
             clearTint();
         }
         GlStateManager.color(1F, 1F, 1F, 1F);
-        if (pose.item != null) {
+        if (pose.item != null && pose.item != HeldItem.NONE) {
             renderHeldItem(pack, pose, model);
         }
         if (skin != null && skin.cape != 0 && PackOrganizer.settings().showCape) {
@@ -196,7 +196,7 @@ public final class PlayerModelRenderer {
         return rodTip == null ? null : rodTip.clone();
     }
 
-    /** ModelBiped.setRotationAngles standing still with an item in the right hand, as javap shows it. */
+    /** ModelBiped.setRotationAngles standing still with the held item (or nothing) in the right hand, as javap shows it. */
     private static void setAngles(ModelBiped m, ModelPose p) {
         m.bipedHead.rotateAngleY = (p.headYaw - p.bodyYaw) / DEG;
         m.bipedHead.rotateAngleX = p.pitch / DEG;
@@ -215,9 +215,11 @@ public final class PlayerModelRenderer {
         m.bipedLeftLeg.rotateAngleY = 0F;
         m.bipedLeftLeg.rotateAngleZ = 0F;
         m.bipedBody.rotateAngleZ = 0F;
-        // heldItemRight: 1 holding, 3 blocking.
-        int held = p.blocking ? 3 : 1;
-        m.bipedRightArm.rotateAngleX = m.bipedRightArm.rotateAngleX * 0.5F - ((float) Math.PI / 10F) * held;
+        // heldItemRight: 0 empty (the arm is left as is), 1 holding, 3 blocking.
+        int held = p.item == null || p.item == HeldItem.NONE ? 0 : p.blocking ? 3 : 1;
+        if (held != 0) {
+            m.bipedRightArm.rotateAngleX = m.bipedRightArm.rotateAngleX * 0.5F - ((float) Math.PI / 10F) * held;
+        }
         if (held == 3) {
             m.bipedRightArm.rotateAngleY = -0.5235988F;
         }
@@ -360,6 +362,8 @@ public final class PlayerModelRenderer {
         String path;
         String under = null;
         switch (pose.item) {
+            case NONE:
+                return;   // the empty hand draws nothing
             case SWORD:
                 path = ModelSpec.sword(pose.armor != null && ModelSpec.MATERIALS.contains(pose.armor)
                         ? pose.armor : "diamond");
