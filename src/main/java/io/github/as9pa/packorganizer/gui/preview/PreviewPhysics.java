@@ -10,14 +10,15 @@ import java.util.Random;
 /**
  * Projectiles and particles of the player preview, in model space: blocks, feet at y 0 with an invisible ground there,
  * +z toward the viewer, yaw 0 facing +z and the right hand toward -x. One {@link #tick()} is one game tick (20 a
- * second); projectile flight runs on a 1/3 clock so the arcs stay readable in the small view.
+ * second) and, as in vanilla, one physics step of every projectile.
  */
 public final class PreviewPhysics {
     /** EntityThrowable and EntityArrow spawn at eye height (1.62) minus 0.1 ... */
     static final double SPAWN_Y = 1.62 - 0.1;
     /** ... and 0.16 toward the right hand. */
     static final double HAND_OFFSET = 0.16;
-    static final float FLIGHT_CLOCK = 1f / 3f;
+    /** EntityArrow and EntityThrowable turn a fifth of the way to the motion each step. */
+    static final float TURN = 0.2f;
     static final int ARROW_SHAKE = 7;
     static final int ARROW_GROUND_TICKS = 100;
     /** A pearl that has not landed after 1.5 s arrives anyway. */
@@ -25,6 +26,7 @@ public final class PreviewPhysics {
     static final double MAX_ABS_Z = 6;
     /** The cast is shortened so the bobber lands about this far out. */
     static final double CAST_DISTANCE = 2;
+    /** EntityFishHook in air: motionY -= 0.04, then motion *= 0.92 (gravity before drag, unlike the others). */
     static final double BOBBER_DRAG = 0.92, BOBBER_GRAVITY = 0.04;
     /** PotionHelper color of the splash potion (Healing). */
     static final int HEALING = 0xF82423;
@@ -79,7 +81,10 @@ public final class PreviewPhysics {
             return;
         }
         float f = Math.min(charge, 1f);
-        launch(Projectile.Kind.ARROW, look(0), f * 3.0, 0.99, 0.05).critical = f >= 1f;
+        // new EntityArrow(world, player, f * 2) aims at velocity * 1.5.
+        Projectile p = launch(Projectile.Kind.ARROW, look(0), f * 3.0, 0.99, 0.05);
+        p.critical = f >= 1f;
+        critTrail(p);
     }
 
     public void throwPearl() {
@@ -154,21 +159,14 @@ public final class PreviewPhysics {
     public void tick() {
         for (Projectile p : new ArrayList<>(projectiles)) {
             p.age++;
-            // Snapped to thirds so three ticks make exactly one step.
-            p.acc = Math.round((p.acc + FLIGHT_CLOCK) * 3f) / 3f;
-            while (p.acc >= 1f && projectiles.contains(p)) {
-                critTrail(p, 1f);
-                p.acc -= 1f;
-                step(p);
+            step(p);
+            if (!projectiles.contains(p)) {
+                continue;
             }
-            if (p.stuck && p.kind == Projectile.Kind.ARROW && projectiles.contains(p)
-                    && ++p.groundTicks >= ARROW_GROUND_TICKS) {
+            critTrail(p);
+            if (p.stuck && p.kind == Projectile.Kind.ARROW && ++p.groundTicks >= ARROW_GROUND_TICKS) {
                 gone(p);
             }
-        }
-        // Crit trail: 4 per arrow step along the segment, each spawned as the drawn arrow passes it.
-        for (Projectile p : projectiles) {
-            critTrail(p, p.acc);
         }
         particles.removeIf(this::stepParticle);
         for (Iterator<Emitter> it = emitters.iterator(); it.hasNext(); ) {
@@ -209,12 +207,19 @@ public final class PreviewPhysics {
     private Projectile launch(Projectile.Kind kind, double[] dir, double speed, double drag, double gravity) {
         Projectile p = new Projectile(kind, -Math.cos(yaw) * HAND_OFFSET, SPAWN_Y, Math.sin(yaw) * HAND_OFFSET,
                 dir[0] * speed, dir[1] * speed, dir[2] * speed, drag, gravity);
+        // setThrowableHeading faces the heading at once, with no turn to ease.
+        p.yaw = p.prevYaw = heading(p.vx, p.vz);
+        p.pitch = p.prevPitch = elevation(p.vx, p.vy, p.vz);
         projectiles.add(p);
         step(p);
         return p;
     }
 
-    /** One physics step. The landing is handled one step after touchdown, once the last segment has been drawn. */
+    /**
+     * One physics step: the previous position and facing are kept for drawing, the projectile moves by its motion,
+     * turns toward it, then drag and gravity apply. The landing is handled one step after touchdown, once the last
+     * segment has been drawn.
+     */
     private void step(Projectile p) {
         if (p.onGround && !p.stuck) {
             land(p);
@@ -231,7 +236,8 @@ public final class PreviewPhysics {
         p.px = p.x;
         p.py = p.y;
         p.pz = p.z;
-        p.critK = 0;
+        p.prevYaw = p.yaw;
+        p.prevPitch = p.pitch;
         if (p.onGround) {
             if (p.shake > 0) {
                 p.shake--;
@@ -249,11 +255,47 @@ public final class PreviewPhysics {
         p.x = nx;
         p.y = ny;
         p.z = nz;
+        turn(p);
         if (!p.onGround) {
             p.vx *= p.drag;
-            p.vy = p.vy * p.drag - p.gravity;
+            if (p.kind == Projectile.Kind.BOBBER) {
+                p.vy = (p.vy - p.gravity) * p.drag;
+            } else {
+                p.vy = p.vy * p.drag - p.gravity;
+            }
             p.vz *= p.drag;
         }
+    }
+
+    /**
+     * EntityArrow and EntityThrowable after the move: the facing of the motion just traveled, eased by {@link #TURN}
+     * from the previous one, the previous one first moved by 360 degrees so the ease (and the drawn lerp) takes the
+     * short way round.
+     */
+    private static void turn(Projectile p) {
+        float yaw = heading(p.vx, p.vz), pitch = elevation(p.vx, p.vy, p.vz);
+        while (pitch - p.prevPitch < -180f) {
+            p.prevPitch -= 360f;
+        }
+        while (pitch - p.prevPitch >= 180f) {
+            p.prevPitch += 360f;
+        }
+        while (yaw - p.prevYaw < -180f) {
+            p.prevYaw -= 360f;
+        }
+        while (yaw - p.prevYaw >= 180f) {
+            p.prevYaw += 360f;
+        }
+        p.pitch = p.prevPitch + (pitch - p.prevPitch) * TURN;
+        p.yaw = p.prevYaw + (yaw - p.prevYaw) * TURN;
+    }
+
+    static float heading(double vx, double vz) {
+        return (float) Math.toDegrees(Math.atan2(vx, vz));
+    }
+
+    static float elevation(double vx, double vy, double vz) {
+        return (float) Math.toDegrees(Math.atan2(vy, Math.sqrt(vx * vx + vz * vz)));
     }
 
     private boolean outside(Projectile p) {
@@ -301,7 +343,7 @@ public final class PreviewPhysics {
             y = ny;
             z += vz;
             vx *= BOBBER_DRAG;
-            vy = vy * BOBBER_DRAG - BOBBER_GRAVITY;
+            vy = (vy - BOBBER_GRAVITY) * BOBBER_DRAG;
             vz *= BOBBER_DRAG;
         }
         return Math.hypot(x, z);
@@ -322,15 +364,21 @@ public final class PreviewPhysics {
         }
     }
 
-    /** EntityCritFX along the arrow segment; its inherited speed is the arrow motion, which runs on the 1/3 clock. */
-    private void critTrail(Projectile p, float upTo) {
-        while (p.critical && !p.onGround && p.critK < 4 && upTo >= p.critK / 4f) {
-            double f = p.critK++ / 4.0;
-            double mx = p.x - p.px, my = p.y - p.py, mz = p.z - p.pz;
+    /**
+     * EntityArrow's crit trail: 4 EntityCritFX at quarters of the segment the arrow is about to be drawn along, all
+     * at once, with 0.4 of (-motion + 0.2 up) as their speed. None on the landing segment.
+     */
+    private void critTrail(Projectile p) {
+        if (!p.critical || p.onGround) {
+            return;
+        }
+        double mx = p.x - p.px, my = p.y - p.py, mz = p.z - p.pz;
+        for (int k = 0; k < 4; k++) {
+            double f = k / 4.0;
             double c = rnd.nextDouble() * 0.3 + 0.6;
             Particle q = spawn(ParticleKind.CRIT, p.px + mx * f, p.py + my * f, p.pz + mz * f,
-                    (rnd.nextDouble() - 0.5) * 0.02 - mx * 0.4 / 3, (rnd.nextDouble() - 0.5) * 0.02 + (0.2 - my) * 0.4 / 3,
-                    (rnd.nextDouble() - 0.5) * 0.02 - mz * 0.4 / 3,
+                    (rnd.nextDouble() - 0.5) * 0.02 - mx * 0.4, (rnd.nextDouble() - 0.5) * 0.02 + (0.2 - my) * 0.4,
+                    (rnd.nextDouble() - 0.5) * 0.02 - mz * 0.4,
                     (int) (6 / (rnd.nextDouble() * 0.8 + 0.6)), (float) (0.1 * 0.75 * fxScale()));
             q.sprite = CRIT_SPRITE;
             color(q, c, c, c);

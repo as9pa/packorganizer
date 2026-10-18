@@ -45,8 +45,21 @@ public class PreviewPhysicsTest {
         double yaw = SIDEWAYS;
         double x = -Math.cos(yaw) * 0.16, y = 1.62 - 0.1, z = Math.sin(yaw) * 0.16;
         double vx = Math.sin(yaw) * 3, vy = 0, vz = Math.cos(yaw) * 3;
+        assertIntegrates(w, arrow, x, y, z, vx, vy, vz, 0.99, 0.05, false, 30);
+        assertTrue(arrow.onGround);
+        assertTrue(w.projectiles().contains(arrow));
+    }
+
+    /**
+     * Steps the reference integrator next to {@code w}, one game tick per step (the first step runs on the throw
+     * itself), and checks the previous and current position and the ground flag after each. Vanilla moves, then
+     * scales the motion by the drag and takes the gravity off; the fishing hook takes the gravity off first.
+     */
+    private static void assertIntegrates(PreviewPhysics w, Projectile p, double x, double y, double z, double vx,
+            double vy, double vz, double drag, double gravity, boolean gravityFirst, int steps) {
         boolean ground = false;
-        for (int step = 1; step <= 30; step++) {
+        for (int step = 1; step <= steps; step++) {
+            double ox = x, oy = y, oz = z;
             if (!ground) {
                 double nx = x + vx, ny = y + vy, nz = z + vz;
                 if (ny <= 0) {
@@ -60,22 +73,129 @@ public class PreviewPhysicsTest {
                 y = ny;
                 z = nz;
                 if (!ground) {
-                    vx *= 0.99;
-                    vy = vy * 0.99 - 0.05;
-                    vz *= 0.99;
+                    vx *= drag;
+                    vy = gravityFirst ? (vy - gravity) * drag : vy * drag - gravity;
+                    vz *= drag;
                 }
             }
-            // The first step runs on the shot itself, then one every 3 ticks.
             if (step > 1) {
-                tick(w, 3);
+                tick(w, 1);
             }
-            assertEquals("x at step " + step, x, arrow.x, EPS);
-            assertEquals("y at step " + step, y, arrow.y, EPS);
-            assertEquals("z at step " + step, z, arrow.z, EPS);
-            assertEquals("ground at step " + step, ground, arrow.onGround);
+            assertEquals("x at step " + step, x, p.x, EPS);
+            assertEquals("y at step " + step, y, p.y, EPS);
+            assertEquals("z at step " + step, z, p.z, EPS);
+            assertEquals("previous x at step " + step, ox, p.px, EPS);
+            assertEquals("previous y at step " + step, oy, p.py, EPS);
+            assertEquals("previous z at step " + step, oz, p.pz, EPS);
+            assertEquals("ground at step " + step, ground, p.onGround);
         }
-        assertTrue(ground);
-        assertTrue(w.projectiles().contains(arrow));
+    }
+
+    /** The vanilla heading in these axes: yaw 0 faces +z, pitch positive looks down, y aimed {@code offsetDeg} off. */
+    private static double[] heading(double yaw, double pitch, double offsetDeg, double speed) {
+        double x = Math.sin(yaw) * Math.cos(pitch), y = -Math.sin(pitch + Math.toRadians(offsetDeg));
+        double z = Math.cos(yaw) * Math.cos(pitch), l = Math.sqrt(x * x + y * y + z * z);
+        return new double[] {x / l * speed, y / l * speed, z / l * speed};
+    }
+
+    @Test
+    public void halfChargeArrowLeavesAtOneAndAHalf() {
+        PreviewPhysics w = physics();
+        w.setAim(SIDEWAYS, (float) Math.toRadians(-10));
+        w.shootArrow(0.5f);
+        Projectile arrow = w.projectiles().get(0);
+        double[] v = heading(SIDEWAYS, (float) Math.toRadians(-10), 0, 1.5);
+        assertIntegrates(w, arrow, -Math.cos(SIDEWAYS) * 0.16, 1.52, Math.sin(SIDEWAYS) * 0.16, v[0], v[1], v[2],
+                0.99, 0.05, false, 20);
+    }
+
+    @Test
+    public void pearlFollowsTheThrowableIntegrator() {
+        // EntityThrowable: getVelocity 1.5, getGravityVelocity 0.03, drag 0.99.
+        PreviewPhysics w = physics();
+        w.setAim(SIDEWAYS, (float) Math.toRadians(-30));
+        w.throwPearl();
+        Projectile pearl = w.projectiles().get(0);
+        double[] v = heading(SIDEWAYS, (float) Math.toRadians(-30), 0, 1.5);
+        assertIntegrates(w, pearl, -Math.cos(SIDEWAYS) * 0.16, 1.52, Math.sin(SIDEWAYS) * 0.16, v[0], v[1], v[2],
+                0.99, 0.03, false, 25);
+    }
+
+    @Test
+    public void potionLeavesTwentyDegreesHighAtHalfABlock() {
+        // EntityPotion: getVelocity 0.5, getGravityVelocity 0.05, getInaccuracy -20 on the pitch of motionY only.
+        PreviewPhysics w = physics();
+        w.setAim(SIDEWAYS, 0f);
+        w.throwPotion();
+        Projectile potion = w.projectiles().get(0);
+        double[] v = heading(SIDEWAYS, 0, -20, 0.5);
+        assertTrue(v[1] > 0);
+        assertIntegrates(w, potion, -Math.cos(SIDEWAYS) * 0.16, 1.52, Math.sin(SIDEWAYS) * 0.16, v[0], v[1], v[2],
+                0.99, 0.05, false, 12);
+    }
+
+    @Test
+    public void bobberTakesGravityBeforeDrag() {
+        PreviewPhysics w = physics();
+        w.setAim(SIDEWAYS, (float) Math.toRadians(-15));
+        w.cast();
+        Projectile b = w.projectiles().get(0);
+        // The searched speed shows in the first step, taken on the cast; it keeps the look direction.
+        double vx = b.x - b.px, vy = b.y - b.py, vz = b.z - b.pz, speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        double[] d = heading(SIDEWAYS, (float) Math.toRadians(-15), 0, speed);
+        assertEquals(d[0], vx, EPS);
+        assertEquals(d[1], vy, EPS);
+        assertEquals(d[2], vz, EPS);
+        assertIntegrates(w, b, b.px, b.py, b.pz, vx, vy, vz, 0.92, 0.04, true, 40);
+        assertTrue(b.onGround);
+        assertEquals(2, Math.hypot(b.x, b.z), 0.15);
+    }
+
+    @Test
+    public void drawPositionLerpsFromThePreviousStep() {
+        PreviewPhysics w = physics();
+        w.setAim(SIDEWAYS, (float) Math.toRadians(-20));
+        w.throwPearl();
+        tick(w, 4);
+        Projectile p = w.projectiles().get(0);
+        assertTrue(p.x != p.px && p.y != p.py);
+        assertEquals(p.px, p.drawX(0f), EPS);
+        assertEquals(p.py, p.drawY(0f), EPS);
+        assertEquals(p.pz, p.drawZ(0f), EPS);
+        assertEquals((p.px + p.x) / 2, p.drawX(0.5f), EPS);
+        assertEquals((p.py + p.y) / 2, p.drawY(0.5f), EPS);
+        assertEquals((p.pz + p.z) / 2, p.drawZ(0.5f), EPS);
+        assertEquals(p.x, p.drawX(1f), EPS);
+        assertEquals(p.y, p.drawY(1f), EPS);
+        assertEquals(p.z, p.drawZ(1f), EPS);
+    }
+
+    @Test
+    public void arrowFacingTurnsAFifthOfTheWayAndLerps() {
+        PreviewPhysics w = physics();
+        w.setAim(SIDEWAYS, (float) Math.toRadians(-30));
+        w.shootArrow(1f);
+        Projectile a = w.projectiles().get(0);
+        // setThrowableHeading: faces the heading, yaw atan2(vx, vz), pitch 30 up.
+        assertEquals(90, a.yaw, 1e-3);
+        assertEquals(30, a.pitch, 1e-3);
+        for (int t = 0; t < 5; t++) {
+            float yaw = a.yaw, pitch = a.pitch;
+            tick(w, 1);
+            double mx = a.x - a.px, my = a.y - a.py, mz = a.z - a.pz;
+            float toYaw = (float) Math.toDegrees(Math.atan2(mx, mz));
+            float toPitch = (float) Math.toDegrees(Math.atan2(my, Math.sqrt(mx * mx + mz * mz)));
+            assertEquals(yaw, a.prevYaw, 1e-4);
+            assertEquals(pitch, a.prevPitch, 1e-4);
+            assertEquals(pitch + (toPitch - pitch) * 0.2f, a.pitch, 1e-3);
+            assertEquals(yaw + (toYaw - yaw) * 0.2f, a.yaw, 1e-3);
+            assertTrue("pitch falls behind the motion", a.pitch > toPitch);
+            assertEquals(a.prevPitch, a.drawPitch(0f), 1e-6);
+            assertEquals((a.prevPitch + a.pitch) / 2, a.drawPitch(0.5f), 1e-4);
+            assertEquals(a.pitch, a.drawPitch(1f), 1e-6);
+            assertEquals(a.prevYaw, a.drawYaw(0f), 1e-6);
+            assertEquals(a.yaw, a.drawYaw(1f), 1e-6);
+        }
     }
 
     @Test
@@ -83,9 +203,20 @@ public class PreviewPhysicsTest {
         PreviewPhysics w = physics();
         w.setAim(SIDEWAYS, -0.3f);
         w.shootArrow(1f);
-        tick(w, 3);
-        // All 4 of the first segment, then the first of the second.
-        assertEquals(5, w.particles().size());
+        Projectile a = w.projectiles().get(0);
+        // EntityArrow: all 4 at once along the segment the arrow is about to be drawn along.
+        assertEquals(4, w.particles().size());
+        for (int k = 0; k < 4; k++) {
+            Particle p = w.particles().get(k);
+            assertEquals(a.px + (a.x - a.px) * k / 4, p.x, EPS);
+            assertEquals(a.py + (a.y - a.py) * k / 4, p.y, EPS);
+            assertEquals(a.pz + (a.z - a.pz) * k / 4, p.z, EPS);
+            // 0.4 of the reversed motion, 0.2 up, give or take 0.01.
+            assertEquals(-(a.x - a.px) * 0.4, p.vx, 0.01 + EPS);
+            assertEquals((0.2 - (a.y - a.py)) * 0.4, p.vy, 0.01 + EPS);
+        }
+        tick(w, 1);
+        assertEquals(8, w.particles().size());
         for (Particle p : w.particles()) {
             assertSame(ParticleKind.CRIT, p.kind);
             assertEquals(65, p.sprite);
