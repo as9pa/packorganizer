@@ -92,4 +92,35 @@ public class RowLookTest {
         assertFalse(RowLook.onScreen(-500, 32, 52, 189));
         assertFalse(RowLook.onScreen(900, 32, 52, 189));
     }
+
+    // Label fit: the label's right edge is row x + 188; a top-level strip ends at x + 162 (16 px cells).
+
+    @Test
+    public void labelFitsWithExactlyTheGap() {
+        // 188 - 24 = 164, two px past 162.
+        assertTrue(RowLook.labelFits(162, 188, 24));
+    }
+
+    @Test
+    public void labelOneShortOfTheGapDoesNotFit() {
+        assertFalse(RowLook.labelFits(162, 188, 25));
+        assertFalse(RowLook.labelFits(163, 188, 24));
+    }
+
+    @Test
+    public void labelTouchingOrOverlappingTheStripDoesNotFit() {
+        assertFalse(RowLook.labelFits(164, 188, 24));
+        assertFalse(RowLook.labelFits(176, 188, 18));
+    }
+
+    @Test
+    public void narrowLabelFitsWithRoomToSpare() {
+        assertTrue(RowLook.labelFits(162, 188, 18));
+    }
+
+    @Test
+    public void labelFitIsRelativeToTheRow() {
+        assertTrue(RowLook.labelFits(162 + 300, 188 + 300, 24));
+        assertFalse(RowLook.labelFits(162 + 300, 188 + 300, 25));
+    }
 }

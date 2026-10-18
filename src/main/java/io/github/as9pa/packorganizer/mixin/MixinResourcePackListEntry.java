@@ -35,7 +35,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Indents rows by folder depth, draws the resolution badge on every row, and shortens the name
  * trim so the badge and indent never overlap the text. While a Found row is hovered and its preview is
  * ready, the name and description give way to a 2x8 grid of the pack's textures. In Previews mode
- * (listPreviews) every on-screen Found row shows its grid instead, and the hovered row its text; see {@link RowLook}.
+ * (listPreviews) every on-screen Found row shows its grid instead, and the hovered row its text; a grid row keeps
+ * its badge only where the badge clears the grid. See {@link RowLook}.
  */
 @Mixin(ResourcePackListEntry.class)
 public abstract class MixinResourcePackListEntry implements RowLayout {
@@ -168,10 +169,9 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         boolean hideBadge = packorganizer$hideBadge;
         packorganizer$preview = null;
         packorganizer$hideBadge = false;
-        if (preview != null) {
-            packorganizer$drawPreview(preview, x, y, originalX + listWidth, slotHeight);
-        }
-        // Drawn after the grid so the badge stays on top where the two meet.
+        int stripRight = preview != null
+                ? packorganizer$drawPreview(preview, x, y, originalX + listWidth, slotHeight)
+                : Integer.MIN_VALUE;
         if (hideBadge || !PackOrganizer.settings().resolutionLabels) {
             return;
         }
@@ -181,15 +181,20 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         }
         FontRenderer font = mc.fontRendererObj;
         int right = originalX + RowBadge.RIGHT_EDGE;
-        font.drawStringWithShadow(badge, right - font.getStringWidth(badge), y + 1, RowBadge.COLOUR);
+        int width = font.getStringWidth(badge);
+        // A strip row keeps its badge only where the badge clears the strip; indents push the strip into it.
+        if (preview != null && !RowLook.labelFits(stripRight, right, width)) {
+            return;
+        }
+        font.drawStringWithShadow(badge, right - width, y + 1, RowBadge.COLOUR);
     }
 
     /**
      * 2x8 cells of 16 px right of the icon; 12 px when 16 would pass the row edge (deep indents).
-     * Cells the pack does not override are drawn dimmed.
+     * Cells the pack does not override are drawn dimmed. Returns the strip's right end.
      */
     @Unique
-    private void packorganizer$drawPreview(PreviewCache.Preview preview, int x, int y, int rowEdge, int slotHeight) {
+    private int packorganizer$drawPreview(PreviewCache.Preview preview, int x, int y, int rowEdge, int slotHeight) {
         int left = x + PREVIEW_OFFSET;
         int cell = left + PreviewSpec.COLUMNS * PREVIEW_CELL > rowEdge ? PREVIEW_CELL_SMALL : PREVIEW_CELL;
         int top = y + (slotHeight - PreviewSpec.ROWS * cell) / 2;
@@ -210,6 +215,7 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         }
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
         GlStateManager.disableBlend();
+        return left + PreviewSpec.COLUMNS * cell;
     }
 
     /**

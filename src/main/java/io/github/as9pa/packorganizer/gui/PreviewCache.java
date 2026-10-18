@@ -14,8 +14,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import javax.imageio.ImageIO;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -26,16 +24,21 @@ import net.minecraft.util.ResourceLocation;
  * Hover previews: the 16 {@link PreviewSpec} textures of a pack as one GL texture. Loading runs on a single
  * background thread; the client thread uploads the finished atlas. Cells the pack does not override show the
  * default pack texture and are flagged missing. All public methods are client thread only.
+ *
+ * <p>The loader serves the newest request first and skips requests gone stale ({@link LoadQueue}), so after a fast
+ * scroll the rows left on screen load before the ones scrolled past.
  */
 public final class PreviewCache {
     private static final int MAX_PACKS = 96;
     private static final String ASSETS = "assets/minecraft/";
+    /** A pending request not renewed for this long is dropped; on-screen rows renew theirs every frame. */
+    private static final long STALE_MS = 500;
 
-    private static final ExecutorService LOADER = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "packorganizer-preview");
-        t.setDaemon(true);
-        return t;
-    });
+    /** Guards QUEUE and Slot.taken; the loader waits on it while the queue is empty. */
+    private static final Object LOCK = new Object();
+    private static final LoadQueue<Slot> QUEUE = new LoadQueue<>(STALE_MS);
+    /** Started by the first request; client thread only. */
+    private static Thread loader;
 
     /** Access-ordered so the first entry is the least recently hovered. */
     private static final LinkedHashMap<File, Slot> CACHE = new LinkedHashMap<>(16, 0.75f, true);
@@ -64,23 +67,31 @@ public final class PreviewCache {
     }
 
     private static final class Slot {
+        final File pack;
+        final IResourcePack defaultPack;
+        /** Set under LOCK once the loader takes the slot; a taken slot is never queued again. */
+        volatile boolean taken;
         /** Written by the loader thread when done. */
         volatile BufferedImage atlas;
         volatile boolean[] missing;
         Preview preview;
+
+        Slot(File pack, IResourcePack defaultPack) {
+            this.pack = pack;
+            this.defaultPack = defaultPack;
+        }
     }
 
-    /** The preview for a pack, or null while it loads. The first call for a pack starts the load. */
+    /**
+     * The preview for a pack, or null while it loads. The first call for a pack queues the load, and every later
+     * call before the loader takes it renews the request, so a pack that stays on screen is not dropped as stale.
+     */
     public static Preview get(File pack) {
         Slot slot = CACHE.get(pack);
         if (slot == null) {
-            slot = new Slot();
+            slot = new Slot(pack, Minecraft.getMinecraft().getResourcePackRepository().rprDefaultResourcePack);
             CACHE.put(pack, slot);
             evict();
-            Slot target = slot;
-            IResourcePack defaultPack = Minecraft.getMinecraft().getResourcePackRepository().rprDefaultResourcePack;
-            LOADER.execute(() -> load(pack, defaultPack, target));
-            return null;
         }
         if (slot.preview == null && slot.atlas != null) {
             DynamicTexture texture = new DynamicTexture(slot.atlas);
@@ -89,21 +100,73 @@ public final class PreviewCache {
             slot.preview = new Preview(location, slot.missing);
             slot.atlas = null;
         }
+        if (slot.preview == null && !slot.taken) {
+            request(slot);
+        }
         return slot.preview;
     }
 
-    /** Drops every preview and its GL texture. Call when the resource packs screen closes. */
+    /** Drops every preview and its GL texture, and every pending load. Call when the resource packs screen closes. */
     public static void clear() {
+        synchronized (LOCK) {
+            QUEUE.clear();
+        }
         for (Slot slot : CACHE.values()) {
             release(slot);
         }
         CACHE.clear();
     }
 
+    /** Queues the slot, or renews its request, unless the loader has taken it meanwhile. */
+    private static void request(Slot slot) {
+        if (loader == null) {
+            loader = new Thread(PreviewCache::loadLoop, "packorganizer-preview");
+            loader.setDaemon(true);
+            loader.start();
+        }
+        synchronized (LOCK) {
+            if (!slot.taken) {
+                QUEUE.request(slot, now());
+                LOCK.notify();
+            }
+        }
+    }
+
+    /** Loader thread: takes the newest live request, waiting while there is none. */
+    private static void loadLoop() {
+        try {
+            while (true) {
+                Slot slot;
+                synchronized (LOCK) {
+                    while ((slot = QUEUE.next(now())) == null) {
+                        LOCK.wait();
+                    }
+                    slot.taken = true;
+                }
+                try {
+                    load(slot.pack, slot.defaultPack, slot);
+                } catch (Error e) {
+                    // Keep the one loader alive for the next pack.
+                    Log.LOG.debug("packorganizer: preview build failed for {}: {}", slot.pack.getName(), e.toString());
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static long now() {
+        return System.nanoTime() / 1_000_000L;
+    }
+
     private static void evict() {
         Iterator<Map.Entry<File, Slot>> it = CACHE.entrySet().iterator();
         while (CACHE.size() > MAX_PACKS && it.hasNext()) {
-            release(it.next().getValue());
+            Slot slot = it.next().getValue();
+            synchronized (LOCK) {
+                QUEUE.remove(slot);
+            }
+            release(slot);
             it.remove();
         }
     }
