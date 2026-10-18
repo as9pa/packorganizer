@@ -41,7 +41,8 @@ public final class PreviewWorld {
     /**
      * Draws the projectiles, particles and (with {@code rodTip}, world space, from the same frame's model) the
      * fishing line. {@code centerX}, {@code feetY} and {@code blockPx} are the model's, in GUI px; {@code partial}
-     * is the client partial tick the particles interpolate with.
+     * is the client partial tick the projectiles and particles interpolate with, from their previous step to the
+     * current one.
      */
     public static void draw(PackModel pack, PreviewPhysics world, float[] rodTip, float centerX, float feetY, float blockPx,
             float partial) {
@@ -65,14 +66,11 @@ public final class PreviewWorld {
 
         Projectile bobber = null;
         for (Projectile p : projectiles) {
-            float f = Math.min(1F, p.acc);
-            double x = p.px + (p.x - p.px) * f;
-            double y = p.py + (p.y - p.py) * f;
-            double z = p.pz + (p.z - p.pz) * f;
+            double x = p.drawX(partial), y = p.drawY(partial), z = p.drawZ(partial);
             float ds = depthScale(z);
             switch (p.kind) {
                 case ARROW:
-                    arrow(pack, p, f, x, y, z, ds);
+                    arrow(pack, p, partial, x, y, z, ds);
                     break;
                 case PEARL:
                     billboard(pack.texture(ModelSpec.ENDER_PEARL), x, y, z, BILLBOARD / 2 * ds, 0F, 0F, 1F, 1F, 1F, 1F, 1F);
@@ -96,7 +94,7 @@ public final class PreviewWorld {
             }
         }
         if (bobber != null && rodTip != null) {
-            line(bobber, rodTip, blockPx);
+            line(bobber, rodTip, blockPx, partial);
         }
         if (!particles.isEmpty()) {
             particles(pack, particles, partial);
@@ -112,10 +110,11 @@ public final class PreviewWorld {
     }
 
     /**
-     * RenderArrow: turned to the velocity (yaw - 90 about y, then pitch about z), the stuck shake, rolled 45 degrees
-     * about x, scaled and shifted -4; a 5x5 back square at x -7 and two crossed 16x5 planes from entity/arrow.png.
+     * RenderArrow: turned to the facing interpolated from the previous step (yaw - 90 about y, then pitch about z),
+     * the stuck shake, rolled 45 degrees about x, scaled and shifted -4; a 5x5 back square at x -7 and two crossed
+     * 16x5 planes from entity/arrow.png.
      */
-    private static void arrow(PackModel pack, Projectile p, float f, double x, double y, double z, float ds) {
+    private static void arrow(PackModel pack, Projectile p, float partial, double x, double y, double z, float ds) {
         int texture = pack.texture(ModelSpec.ARROW);
         if (texture == 0) {
             return;
@@ -124,9 +123,9 @@ public final class PreviewWorld {
         GlStateManager.color(1F, 1F, 1F, 1F);
         GlStateManager.pushMatrix();
         GlStateManager.translate(x, y, z);
-        GlStateManager.rotate((float) Math.toDegrees(Math.atan2(p.vx, p.vz)) - 90F, 0F, 1F, 0F);
-        float pitch = (float) Math.toDegrees(Math.atan2(p.vy, Math.sqrt(p.vx * p.vx + p.vz * p.vz)));
-        float shake = p.shake > 0 ? p.shake - f : 0F;
+        GlStateManager.rotate(p.drawYaw(partial) - 90F, 0F, 1F, 0F);
+        float pitch = p.drawPitch(partial);
+        float shake = p.shake > 0 ? p.shake - partial : 0F;
         if (shake > 0F) {
             pitch += -(float) Math.sin(shake * 3F) * shake;
         }
@@ -180,11 +179,9 @@ public final class PreviewWorld {
      * RenderFish's line: 16 segments from the top of the bobber sprite to the rod tip, x and z straight, y along
      * {@code (f*f+f)/2} so it sags toward the bobber; black, 1 GUI px wide.
      */
-    private static void line(Projectile b, float[] tip, float blockPx) {
-        float f0 = Math.min(1F, b.acc);
-        double bx = b.px + (b.x - b.px) * f0;
-        double bz = b.pz + (b.z - b.pz) * f0;
-        double by = b.py + (b.y - b.py) * f0 + BILLBOARD / 2 * depthScale(bz);
+    private static void line(Projectile b, float[] tip, float blockPx, float partial) {
+        double bx = b.drawX(partial), bz = b.drawZ(partial);
+        double by = b.drawY(partial) + BILLBOARD / 2 * depthScale(bz);
         double half = 0.5 / blockPx;
         GlStateManager.disableTexture2D();
         GlStateManager.color(1F, 1F, 1F, 1F);
