@@ -368,16 +368,67 @@ public class PreviewPhysicsTest {
     }
 
     @Test
-    public void arrowFlyingOffTheViewDoesNotLand() {
+    public void arrowFlyingOffTheViewLandsUnseenOnce() {
         PreviewPhysics w = physics();
         int[] landed = {0};
         w.setOnArrowLanded(() -> landed[0]++);
         w.setViewBounds(-1, 1, -10);
         w.setAim(SIDEWAYS, 0f);
         w.shootArrow(1f);
-        tick(w, 6);
+        Projectile arrow = w.projectiles().get(0);
+        assertTrue(arrow.critical);
+        assertFalse(arrow.hidden);
+        boolean wasHidden = false;
+        int ticks = 0;
+        while (w.projectiles().contains(arrow) && ticks++ < 100) {
+            int crits = count(w, ParticleKind.CRIT);
+            w.tick();
+            if (wasHidden) {
+                // Once hidden it is never drawn again: it stays hidden until it is removed.
+                assertTrue("hidden at tick " + ticks, arrow.hidden || !w.projectiles().contains(arrow));
+            }
+            if (arrow.hidden) {
+                wasHidden = true;
+                assertTrue("no crit trail while hidden", count(w, ParticleKind.CRIT) <= crits);
+                assertFalse(arrow.stuck && w.projectiles().contains(arrow));
+            }
+        }
+        assertTrue(wasHidden);
+        assertTrue(arrow.x > 1);
+        assertEquals(0, arrow.y, EPS);
+        assertFalse(w.projectiles().contains(arrow));
+        assertEquals(1, landed[0]);
+        tick(w, PreviewPhysics.ARROW_GROUND_TICKS + 5);
+        assertEquals(1, landed[0]);
+    }
+
+    @Test
+    public void arrowLandingInsideTheViewSticksAsBefore() {
+        PreviewPhysics w = physics();
+        int[] landed = {0};
+        w.setOnArrowLanded(() -> landed[0]++);
+        w.setViewBounds(-1, 1, -10);
+        w.setAim(SIDEWAYS, (float) (Math.PI / 2));
+        w.shootArrow(0.5f);
+        Projectile arrow = w.projectiles().get(0);
+        int ticks = 0;
+        while (!arrow.onGround) {
+            w.tick();
+            ticks++;
+        }
+        assertTrue(ticks < 20);
+        tick(w, 3);
+        assertFalse(arrow.hidden);
+        assertTrue(arrow.stuck);
+        assertEquals(1, landed[0]);
+        assertTrue(arrow.shake > 0 && arrow.shake <= 7);
+        tick(w, 90);
+        assertEquals(0, arrow.shake);
+        assertEquals(1, w.projectiles().size());
+        assertFalse(arrow.hidden);
+        tick(w, 12);
         assertTrue(w.projectiles().isEmpty());
-        assertEquals(0, landed[0]);
+        assertEquals(1, landed[0]);
     }
 
     @Test
@@ -399,36 +450,58 @@ public class PreviewPhysicsTest {
     }
 
     @Test
-    public void potionFlyingOffTheViewDoesNotBreak() {
+    public void potionFlyingOffTheViewBreaksUnseenOnce() {
         PreviewPhysics w = physics();
         int[] broke = {0};
         w.setOnPotionBroke(() -> broke[0]++);
         w.setViewBounds(-0.5, 0.5, -10);
         w.setAim(SIDEWAYS, 0f);
         w.throwPotion();
+        Projectile potion = w.projectiles().get(0);
+        assertFalse(potion.hidden);
+        tick(w, 3);
+        assertTrue(potion.hidden);
+        assertEquals(0, broke[0]);
         tick(w, 40);
         assertTrue(w.projectiles().isEmpty());
-        assertEquals(0, broke[0]);
+        assertEquals(1, broke[0]);
+        // No shatter off the view: no glass cracks, no instant spell ring.
+        assertTrue(w.particles().isEmpty());
     }
 
     @Test
-    public void arrowPastMaxXIsRemoved() {
+    public void arrowPastMaxXIsHidden() {
         PreviewPhysics w = physics();
         w.setViewBounds(-1, 1, -10);
         w.setAim(SIDEWAYS, 0f);
         w.shootArrow(1f);
         assertEquals(1, w.projectiles().size());
-        tick(w, 6);
-        assertTrue(w.projectiles().isEmpty());
+        Projectile arrow = w.projectiles().get(0);
+        assertFalse(arrow.hidden);
+        tick(w, 1);
+        assertTrue(arrow.x > 1);
+        assertTrue(arrow.hidden);
+        assertFalse(arrow.onGround);
     }
 
     @Test
-    public void arrowTowardTheViewerIsRemovedPastZSix() {
+    public void arrowTowardTheViewerIsHiddenPastZSixUntilItLands() {
         PreviewPhysics w = physics();
+        int[] landed = {0};
+        w.setOnArrowLanded(() -> landed[0]++);
         w.setAim(0f, -0.2f);
         w.shootArrow(1f);
+        Projectile arrow = w.projectiles().get(0);
         tick(w, 12);
+        assertTrue(arrow.hidden);
+        assertTrue(arrow.z > PreviewPhysics.MAX_ABS_Z);
+        assertEquals(0, landed[0]);
+        int ticks = 0;
+        while (!w.projectiles().isEmpty() && ticks++ < 100) {
+            w.tick();
+        }
         assertTrue(w.projectiles().isEmpty());
+        assertEquals(1, landed[0]);
     }
 
     @Test
