@@ -199,9 +199,13 @@ public final class PreviewSim {
         return n == 0 ? 0 : (r / n) << 16 | (g / n) << 8 | (b / n);
     }
 
-    /** Red tint alpha for the body and armor: vanilla holds it flat while hurt, so the partial tick is unused. */
+    /**
+     * Red tint alpha for the body and armor. At {@code partial} 0 this is vanilla, flat while hurt; between ticks it
+     * runs on toward the next tick's value, so the flash fades out over its last tick instead of cutting off.
+     */
     public float hurt(float partial) {
-        return hurtTicks > 0 ? HURT_TINT : 0f;
+        float left = hurtTicks - partial;   // hurt ticks still to run at this point of the tick
+        return left > 0 ? HURT_TINT * Math.min(1f, left) : 0f;
     }
 
     public PreviewPhysics world() {
