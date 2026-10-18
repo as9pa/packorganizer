@@ -7,11 +7,14 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import javax.imageio.ImageIO;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -90,6 +93,73 @@ public class PackTextureReaderTest {
         File dir = tmp.newFolder("bottle-only");
         TestPacks.write(new File(dir, POTION), TestPacks.png(16, 16));
         assertNull(PackTextureReader.readLayers(dir)[PreviewSpec.OVERLAY]);
+    }
+
+    @Test
+    public void subsamplingKeepsAtLeastTheCellAndNeverUpscales() {
+        assertEquals(1, PackTextureReader.subsampling(0, PreviewSpec.MAX_CELL));
+        assertEquals(1, PackTextureReader.subsampling(16, PreviewSpec.MAX_CELL));
+        assertEquals(1, PackTextureReader.subsampling(64, PreviewSpec.MAX_CELL));
+        assertEquals(1, PackTextureReader.subsampling(127, PreviewSpec.MAX_CELL));
+        assertEquals(2, PackTextureReader.subsampling(128, PreviewSpec.MAX_CELL));
+        assertEquals(8, PackTextureReader.subsampling(1000, PreviewSpec.MAX_CELL));
+        assertEquals(64, PackTextureReader.subsampling(4096, PreviewSpec.MAX_CELL));
+        assertEquals(1, PackTextureReader.subsampling(4096, 0));
+    }
+
+    private static final int RED = 0xFFFF0000;
+    private static final int BLUE = 0xFF0000FF;
+    private static final int GREEN = 0xFF00FF00;
+
+    @Test
+    public void largeTexturesDecodeSubsampledFromWidthAndKeepTheirPixels() throws Exception {
+        BufferedImage strip = new BufferedImage(1024, 2048, BufferedImage.TYPE_INT_ARGB);
+        fill(strip, 0, 0, 16, 16, RED);
+        fill(strip, 512, 512, 16, 16, BLUE);
+        fill(strip, 0, 1024, 1024, 1024, GREEN);
+        // the heart sits at (52, 0, 9, 9) of 256, so (832, 0, 144, 144) here
+        BufferedImage icons = new BufferedImage(4096, 256, BufferedImage.TYPE_INT_ARGB);
+        fill(icons, 832, 0, 2, 2, RED);
+        fill(icons, 974, 142, 2, 2, BLUE);
+        Map<String, byte[]> e = new LinkedHashMap<>();
+        e.put(STONE, png(strip));
+        e.put(POTION, TestPacks.png(64, 1024));
+        e.put(PreviewSpec.ICONS, png(icons));
+        File pack = TestPacks.zip(new File(tmp.getRoot(), "big.zip"), e);
+
+        BufferedImage[] got = PackTextureReader.read(pack);
+        BufferedImage stone = got[0];
+        assertEquals(64, stone.getWidth());
+        assertEquals(64, stone.getHeight());
+        assertEquals(RED, stone.getRGB(0, 0));
+        assertEquals(BLUE, stone.getRGB(32, 32));
+        assertEquals(0, stone.getRGB(0, 63));
+        assertEquals(64, got[PreviewSpec.POTION].getWidth());
+        assertEquals(64, got[PreviewSpec.POTION].getHeight());
+        BufferedImage heart = got[PreviewSpec.HEART];
+        assertEquals(72, heart.getWidth());
+        assertEquals(72, heart.getHeight());
+        assertEquals(RED, heart.getRGB(0, 0));
+        assertEquals(BLUE, heart.getRGB(71, 71));
+
+        String rel = "blocks/stone.png";
+        BufferedImage full = PackTextureReader.readPaths(pack, Arrays.asList(rel)).get(rel);
+        assertEquals(1024, full.getWidth());
+        assertEquals(2048, full.getHeight());
+    }
+
+    private static void fill(BufferedImage img, int x, int y, int w, int h, int argb) {
+        for (int py = y; py < y + h; py++) {
+            for (int px = x; px < x + w; px++) {
+                img.setRGB(px, py, argb);
+            }
+        }
+    }
+
+    private static byte[] png(BufferedImage img) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", out);
+        return out.toByteArray();
     }
 
     private static final String ARMOR = "models/armor/diamond_layer_1.png";
