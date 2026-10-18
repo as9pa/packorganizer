@@ -348,6 +348,70 @@ public class PreviewPhysicsTest {
     }
 
     @Test
+    public void arrowLandedRunsOnceWhenItSticks() {
+        PreviewPhysics w = physics();
+        int[] landed = {0};
+        w.setOnArrowLanded(() -> landed[0]++);
+        w.setAim(0f, (float) (Math.PI / 2));
+        w.shootArrow(1f);
+        Projectile arrow = w.projectiles().get(0);
+        int ticks = 0;
+        while (!arrow.stuck && ticks++ < 20) {
+            assertEquals(0, landed[0]);
+            w.tick();
+        }
+        assertTrue(arrow.stuck);
+        assertEquals(1, landed[0]);
+        tick(w, PreviewPhysics.ARROW_GROUND_TICKS + 5);
+        assertTrue(w.projectiles().isEmpty());
+        assertEquals(1, landed[0]);
+    }
+
+    @Test
+    public void arrowFlyingOffTheViewDoesNotLand() {
+        PreviewPhysics w = physics();
+        int[] landed = {0};
+        w.setOnArrowLanded(() -> landed[0]++);
+        w.setViewBounds(-1, 1, -10);
+        w.setAim(SIDEWAYS, 0f);
+        w.shootArrow(1f);
+        tick(w, 6);
+        assertTrue(w.projectiles().isEmpty());
+        assertEquals(0, landed[0]);
+    }
+
+    @Test
+    public void potionBrokeRunsOnceAfterTheShatter() {
+        PreviewPhysics w = physics();
+        int[] broke = {0};
+        int[] particlesThen = {-1};
+        w.setOnPotionBroke(() -> {
+            broke[0]++;
+            particlesThen[0] = count(w, ParticleKind.SPELL_INSTANT);
+        });
+        w.setAim(0f, (float) (Math.PI / 2));
+        w.throwPotion();
+        assertEquals(0, broke[0]);
+        tick(w, 20);
+        assertTrue(w.projectiles().isEmpty());
+        assertEquals(1, broke[0]);
+        assertEquals(100, particlesThen[0]);
+    }
+
+    @Test
+    public void potionFlyingOffTheViewDoesNotBreak() {
+        PreviewPhysics w = physics();
+        int[] broke = {0};
+        w.setOnPotionBroke(() -> broke[0]++);
+        w.setViewBounds(-0.5, 0.5, -10);
+        w.setAim(SIDEWAYS, 0f);
+        w.throwPotion();
+        tick(w, 40);
+        assertTrue(w.projectiles().isEmpty());
+        assertEquals(0, broke[0]);
+    }
+
+    @Test
     public void arrowPastMaxXIsRemoved() {
         PreviewPhysics w = physics();
         w.setViewBounds(-1, 1, -10);

@@ -3,6 +3,10 @@ package io.github.as9pa.packorganizer.gui.preview;
 import static org.junit.Assert.*;
 
 import io.github.as9pa.packorganizer.gui.preview.Particle.ParticleKind;
+import io.github.as9pa.packorganizer.gui.preview.sound.PreviewSound;
+import io.github.as9pa.packorganizer.gui.preview.sound.VanillaSoundRules;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import org.junit.Test;
@@ -61,6 +65,217 @@ public class PreviewSimTest {
         assertEquals((expected >> 16) & 255, (actual >> 16) & 255, 1);
         assertEquals((expected >> 8) & 255, (actual >> 8) & 255, 1);
         assertEquals(expected & 255, actual & 255, 1);
+    }
+
+    private static final long SOUND_SEED = 42;
+
+    /** Records the sounds the sim sends, in order. */
+    private static final class Heard implements PreviewSim.SoundSink {
+        final List<PreviewSound> events = new ArrayList<>();
+        final List<float[]> levels = new ArrayList<>();
+
+        @Override
+        public void sound(PreviewSound s, float volume, float pitch) {
+            events.add(s);
+            levels.add(new float[] {volume, pitch});
+        }
+
+        void assertPlayed(int i, PreviewSound s, float volume, float pitch) {
+            assertEquals("event " + i, s, events.get(i));
+            assertEquals("volume " + i, volume, levels.get(i)[0], 0f);
+            assertEquals("pitch " + i, pitch, levels.get(i)[1], 0f);
+        }
+    }
+
+    /** A sim whose sound draws replay from {@code new Random(SOUND_SEED)}. */
+    private static PreviewSim heard(HeldItem item, Heard out) {
+        PreviewSim s = new PreviewSim(new Random(7), new Random(SOUND_SEED));
+        s.setSoundSink(out);
+        s.setItem(item);
+        return s;
+    }
+
+    /** Ticks until the projectiles are gone, at most n ticks. */
+    private static void untilEmpty(PreviewSim s, int n) {
+        for (int t = 0; t < n && !s.world().projectiles().isEmpty(); t++) {
+            s.tick();
+        }
+        assertTrue(s.world().projectiles().isEmpty());
+    }
+
+    @Test
+    public void swordAndFistHitsOnTheModelSoundHurt() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.SWORD, out);
+        s.leftClick(true);
+        s.setItem(HeldItem.NONE);
+        s.leftClick(true);
+        assertEquals(2, out.events.size());
+        out.assertPlayed(0, PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(r));
+        out.assertPlayed(1, PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(r));
+    }
+
+    @Test
+    public void bowReleaseSoundsWithTheChargeThenTheArrowHitsTheGround() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.BOW, out);
+        s.setAim(0f, (float) (Math.PI / 2));
+        s.rightPress();
+        ticks(s, 10);
+        assertTrue("drawing is silent", out.events.isEmpty());
+        s.rightRelease();
+        float f = 10 / 20f;
+        f = (f * f + f * 2) / 3;
+        assertEquals(1, out.events.size());
+        out.assertPlayed(0, PreviewSound.BOW, 1f, VanillaSoundRules.bowReleasePitch(r, f));
+        ticks(s, 20);
+        assertTrue(s.world().projectiles().get(0).stuck);
+        assertEquals(2, out.events.size());
+        out.assertPlayed(1, PreviewSound.BOW_HIT, 1f, VanillaSoundRules.bowHitPitch(r));
+        ticks(s, PreviewPhysics.ARROW_GROUND_TICKS);
+        assertEquals(2, out.events.size());
+    }
+
+    @Test
+    public void fullBowReleaseUsesChargeOneAndATapIsSilent() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.BOW, out);
+        s.rightPress();
+        ticks(s, 1);   // f 0.034, under 0.1: no arrow and no sound
+        s.rightRelease();
+        assertTrue(out.events.isEmpty());
+        s.rightPress();
+        ticks(s, 40);
+        s.rightRelease();
+        assertEquals(1, out.events.size());
+        out.assertPlayed(0, PreviewSound.BOW, 1f, VanillaSoundRules.bowReleasePitch(r, 1f));
+    }
+
+    @Test
+    public void appleEatsOnVanillasTicksThenEatsAndBurpsAtTheEnd() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.GOLDEN_APPLE, out);
+        s.rightPress();
+        // Tick t tests itemInUseCount 33 - t; 24, 20, 16, 12, 8 and 4 fall on these ticks.
+        List<Integer> eatTicks = Arrays.asList(9, 13, 17, 21, 25, 29);
+        for (int t = 1; t <= 31; t++) {
+            int before = out.events.size();
+            s.tick();
+            if (eatTicks.contains(t)) {
+                assertEquals("tick " + t, before + 1, out.events.size());
+                float volume = VanillaSoundRules.eatVolume(r);
+                out.assertPlayed(before, PreviewSound.EAT, volume, VanillaSoundRules.eatPitch(r));
+            } else {
+                assertEquals("tick " + t, before, out.events.size());
+            }
+        }
+        s.tick();   // tick 32: the count reaches 0 and onItemUseFinish eats once more, then burps
+        assertEquals(8, out.events.size());
+        float volume = VanillaSoundRules.eatVolume(r);
+        out.assertPlayed(6, PreviewSound.EAT, volume, VanillaSoundRules.eatPitch(r));
+        out.assertPlayed(7, PreviewSound.BURP, VanillaSoundRules.BURP_VOLUME, VanillaSoundRules.burpPitch(r));
+        assertEquals(2, s.effects().size());
+        s.rightRelease();
+        ticks(s, 40);
+        assertEquals(8, out.events.size());
+    }
+
+    @Test
+    public void appleReleasedEarlyDoesNotBurp() {
+        Heard out = new Heard();
+        PreviewSim s = heard(HeldItem.GOLDEN_APPLE, out);
+        s.rightPress();
+        ticks(s, 20);
+        s.rightRelease();
+        ticks(s, 40);
+        assertEquals(Arrays.asList(PreviewSound.EAT, PreviewSound.EAT, PreviewSound.EAT), out.events);
+    }
+
+    @Test
+    public void potionThrowSoundsThenGlassOnImpact() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.SPLASH_POTION, out);
+        s.setAim(0f, (float) (Math.PI / 2));
+        s.rightPress();
+        assertEquals(1, out.events.size());
+        out.assertPlayed(0, PreviewSound.BOW, VanillaSoundRules.THROW_VOLUME, VanillaSoundRules.throwPitch(r));
+        untilEmpty(s, 20);
+        assertEquals(2, out.events.size());
+        out.assertPlayed(1, PreviewSound.GLASS, 1f, VanillaSoundRules.glassPitch(r));
+    }
+
+    @Test
+    public void rodCastSoundsAndReelingInIsSilent() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.FISHING_ROD, out);
+        s.rightPress();
+        assertTrue(s.rodCast());
+        assertEquals(1, out.events.size());
+        out.assertPlayed(0, PreviewSound.BOW, VanillaSoundRules.THROW_VOLUME, VanillaSoundRules.throwPitch(r));
+        ticks(s, 30);
+        s.rightPress();
+        assertFalse(s.rodCast());
+        s.rightPress();
+        ticks(s, 5);
+        s.setItem(HeldItem.SWORD);   // switching away reels in too
+        assertFalse(s.rodCast());
+        assertEquals(2, out.events.size());
+        out.assertPlayed(1, PreviewSound.BOW, VanillaSoundRules.THROW_VOLUME, VanillaSoundRules.throwPitch(r));
+    }
+
+    @Test
+    public void pearlThrowSoundsThenHurtOnLanding() {
+        Heard out = new Heard();
+        Random r = new Random(SOUND_SEED);
+        PreviewSim s = heard(HeldItem.ENDER_PEARL, out);
+        s.rightPress();
+        assertEquals(1, out.events.size());
+        out.assertPlayed(0, PreviewSound.BOW, VanillaSoundRules.THROW_VOLUME, VanillaSoundRules.throwPitch(r));
+        untilEmpty(s, 60);
+        assertEquals(2, out.events.size());
+        out.assertPlayed(1, PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(r));
+    }
+
+    @Test
+    public void switchingSwingingBlockingAndDrawingAreSilent() {
+        Heard out = new Heard();
+        PreviewSim s = heard(HeldItem.SWORD, out);
+        s.leftClick(false);
+        s.rightPress();
+        ticks(s, 30);
+        s.rightRelease();
+        s.setEnchanted(true);
+        for (HeldItem item : HeldItem.values()) {
+            s.setItem(item);
+            s.leftClick(false);
+            ticks(s, 5);
+        }
+        s.setItem(HeldItem.BOW);
+        s.leftClick(true);   // not a sword or fist: a swing
+        s.rightPress();
+        ticks(s, 30);
+        s.setItem(HeldItem.SWORD);   // switching drops the draw without a shot
+        s.rightRelease();
+        ticks(s, 20);
+        assertTrue(out.events.isEmpty());
+    }
+
+    @Test
+    public void noSinkIsSilentAndSafe() {
+        PreviewSim s = new PreviewSim(new Random(7));
+        s.leftClick(true);
+        s.setSoundSink(null);
+        s.leftClick(true);
+        s.setItem(HeldItem.GOLDEN_APPLE);
+        s.rightPress();
+        ticks(s, 32);
+        assertEquals(2, s.effects().size());
     }
 
     @Test

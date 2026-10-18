@@ -2,6 +2,9 @@ package io.github.as9pa.packorganizer.gui.preview.sound;
 
 import static org.junit.Assert.*;
 
+import io.github.as9pa.packorganizer.Settings;
+import io.github.as9pa.packorganizer.gui.preview.HeldItem;
+import io.github.as9pa.packorganizer.gui.preview.PreviewSim;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -279,6 +282,45 @@ public class PreviewSoundsTest {
         s.setEnabled(true);
         s.play(PreviewSound.HURT, 1f, 1f);
         assertEquals("pack-hit3", out.lastBytes());
+    }
+
+    /** The panel's wiring: the sim's sink is play, and each tick enables it from the Preview sounds switch. */
+    @Test
+    public void previewSoundsOffKeepsTheSimsSoundsFromTheEngine() {
+        vanillaFiles.put(HIT1, ogg("vanilla-hit1"));
+        Settings settings = new Settings();
+        settings.previewSounds = false;
+        PreviewSounds s = sounds(0, 0);
+        PreviewSim sim = new PreviewSim(new Random(7), new Random(1));
+        sim.setSoundSink(s::play);
+        s.setEnabled(settings.previewSounds);
+        sim.leftClick(true);
+        sim.setItem(HeldItem.ENDER_PEARL);
+        sim.rightPress();
+        for (int i = 0; i < 60; i++) {
+            sim.tick();
+        }
+        assertTrue(out.ids.isEmpty());
+        assertTrue(vanillaReads.isEmpty());
+
+        settings.previewSounds = true;
+        s.setEnabled(settings.previewSounds);
+        sim.setItem(HeldItem.SWORD);
+        sim.leftClick(true);
+        assertEquals(1, out.ids.size());
+        assertEquals("vanilla-hit1", out.lastBytes());
+    }
+
+    /** Hovering a row or switching packs only calls setPack, which reads and plays nothing. */
+    @Test
+    public void choosingPacksPlaysNothing() throws Exception {
+        PreviewSounds s = sounds();
+        s.setPack(zip("h.zip", HIT1, "pack-hit1"));
+        s.setPack(null);
+        s.setPack(zip("i.zip", BOW, "pack-bow"));
+        assertTrue(out.ids.isEmpty());
+        assertEquals(0, s.zipOpens);
+        assertTrue(vanillaReads.isEmpty());
     }
 
     @Test

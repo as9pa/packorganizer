@@ -1,5 +1,7 @@
 package io.github.as9pa.packorganizer.gui.preview;
 
+import io.github.as9pa.packorganizer.gui.preview.sound.PreviewSound;
+import io.github.as9pa.packorganizer.gui.preview.sound.VanillaSoundRules;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -21,8 +23,16 @@ public final class PreviewSim {
     /** RendererLivingEntity tints a hurt entity red at this alpha for the whole hurt time. */
     static final float HURT_TINT = 0.3f;
 
+    /** Where the sim's sounds go; the panel plays them from the shown pack. */
+    public interface SoundSink {
+        void sound(PreviewSound s, float volume, float pitch);
+    }
+
     private final Random rnd;
+    /** Volume and pitch draws only, so sounds leave the particle sequence alone. */
+    private final Random soundRnd;
     private final PreviewPhysics physics;
+    private SoundSink sounds = (s, volume, pitch) -> {};
     private final SwingTimer swing = new SwingTimer();
     private final List<Effect> effects = new ArrayList<>();
     private final List<Effect> effectView = Collections.unmodifiableList(effects);
@@ -34,13 +44,30 @@ public final class PreviewSim {
     private int hurtTicks;
 
     public PreviewSim(Random rnd) {
+        this(rnd, new Random());
+    }
+
+    /** {@code soundRnd} draws each sound's volume and pitch as vanilla does (VanillaSoundRules). */
+    public PreviewSim(Random rnd, Random soundRnd) {
         this.rnd = rnd;
+        this.soundRnd = soundRnd;
         physics = new PreviewPhysics(rnd);
-        // EntityEnderPearl.onImpact: portal particles around the thrower and the fall damage flash.
+        // EntityEnderPearl.onImpact: portal particles around the thrower and the fall damage flash and hurt sound.
         physics.setOnPearlLanded(() -> {
             physics.portalBurst();
             hurtTicks = HURT_TICKS;
+            sounds.sound(PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(soundRnd));
         });
+        // EntityArrow hitting a block, and RenderGlobal.playAuxSFX 2002 for the potion.
+        physics.setOnArrowLanded(() ->
+                sounds.sound(PreviewSound.BOW_HIT, 1f, VanillaSoundRules.bowHitPitch(soundRnd)));
+        physics.setOnPotionBroke(() ->
+                sounds.sound(PreviewSound.GLASS, 1f, VanillaSoundRules.glassPitch(soundRnd)));
+    }
+
+    /** Sounds for the actions on the model; none (the default) is silent. */
+    public void setSoundSink(SoundSink sink) {
+        sounds = sink == null ? (s, volume, pitch) -> {} : sink;
     }
 
     /** Switching items stops any use and reels the rod in; leaving the apple clears its effects. */
@@ -83,17 +110,20 @@ public final class PreviewSim {
                 break;
             case ENDER_PEARL:
                 swing.swing();
+                throwSound();
                 physics.throwPearl();
                 break;
             case SPLASH_POTION:
                 swing.swing();
+                throwSound();
                 physics.throwPotion();
                 break;
             case FISHING_ROD:
                 swing.swing();
                 if (physics.rodOut()) {
-                    physics.reelIn();
+                    physics.reelIn();   // ItemFishingRod reels in without a sound
                 } else {
+                    throwSound();
                     physics.cast();
                 }
                 break;
@@ -109,7 +139,9 @@ public final class PreviewSim {
             float f = useTicks / 20f;
             f = (f * f + f * 2) / 3;
             if (f >= 0.1f) {
-                physics.shootArrow(Math.min(f, 1f));
+                f = Math.min(f, 1f);
+                sounds.sound(PreviewSound.BOW, 1f, VanillaSoundRules.bowReleasePitch(soundRnd, f));
+                physics.shootArrow(f);
             }
         }
         stopUsing();
@@ -122,6 +154,7 @@ public final class PreviewSim {
     public void leftClick(boolean onModel) {
         if (onModel && (item == HeldItem.SWORD || item == HeldItem.NONE)) {
             hurtTicks = HURT_TICKS;
+            sounds.sound(PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(soundRnd));
             physics.critBurst(false);
             if (enchanted && item == HeldItem.SWORD) {
                 physics.critBurst(true);
@@ -233,14 +266,33 @@ public final class PreviewSim {
     /** EntityPlayer.onUpdate for food in use: crumbs every 4 ticks once 25 or fewer remain, then the last bite. */
     private void eat() {
         int remaining = EAT_TICKS - useTicks;
+        // The eat sound tests itemInUseCount as onUpdate does, before this tick takes one off: remaining + 1.
+        int count = remaining + 1;
+        if (count <= 25 && count % 4 == 0) {
+            eatSound();
+        }
         if (remaining > 0 && remaining <= 25 && remaining % 4 == 0) {
             physics.crumbs(5, EYE_Y);
         } else if (remaining <= 0) {
             physics.crumbs(16, EYE_Y);
+            // onItemUseFinish: updateItemUse(stack, 16) eats once more, then ItemFood burps.
+            eatSound();
+            sounds.sound(PreviewSound.BURP, VanillaSoundRules.BURP_VOLUME, VanillaSoundRules.burpPitch(soundRnd));
             addEffect(Effect.regeneration());
             addEffect(Effect.absorption());
             stopUsing();
         }
+    }
+
+    /** EntityLivingBase.updateItemUse for EAT; the volume is drawn before the pitch. */
+    private void eatSound() {
+        float volume = VanillaSoundRules.eatVolume(soundRnd);
+        sounds.sound(PreviewSound.EAT, volume, VanillaSoundRules.eatPitch(soundRnd));
+    }
+
+    /** ItemEnderPearl, splash ItemPotion and ItemFishingRod casting. */
+    private void throwSound() {
+        sounds.sound(PreviewSound.BOW, VanillaSoundRules.THROW_VOLUME, VanillaSoundRules.throwPitch(soundRnd));
     }
 
     private void stopUsing() {

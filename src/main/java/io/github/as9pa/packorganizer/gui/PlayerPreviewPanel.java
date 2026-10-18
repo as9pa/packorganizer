@@ -22,12 +22,18 @@ import io.github.as9pa.packorganizer.gui.preview.SkinTextures;
 import io.github.as9pa.packorganizer.gui.preview.SkyBackdrop;
 import io.github.as9pa.packorganizer.gui.preview.SpinSpring;
 import io.github.as9pa.packorganizer.gui.preview.SubTick;
+import io.github.as9pa.packorganizer.gui.preview.sound.PreviewSoundPlayer;
+import io.github.as9pa.packorganizer.gui.preview.sound.PreviewSounds;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.WeakHashMap;
 import net.minecraft.client.Minecraft;
@@ -40,6 +46,7 @@ import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.client.resources.IResourcePack;
 import net.minecraft.client.resources.ResourcePackListEntry;
 import net.minecraft.client.resources.ResourcePackListEntryFound;
 import net.minecraft.client.resources.ResourcePackRepository;
@@ -120,6 +127,18 @@ public final class PlayerPreviewPanel extends Gui {
     private final HeadFollow head = new HeadFollow();
     private final SpinSpring spin = new SpinSpring();
     private final PreviewSim sim = new PreviewSim(new Random());
+    /** The shown pack's sounds for actions on the model, vanilla where it has none. */
+    private final PreviewSounds sounds = new PreviewSounds(new PreviewSounds.Output() {
+        @Override
+        public void play(String id, byte[] ogg, float volume, float pitch) {
+            PreviewSoundPlayer.play(id, ogg, volume, pitch);
+        }
+
+        @Override
+        public void unload(String id) {
+            PreviewSoundPlayer.unload(id);
+        }
+    }, PlayerPreviewPanel::vanillaSound, new Random());
     /** The partial tick everything tick-driven draws with; the screen's freezes while the game is paused. */
     private final SubTick subTick = new SubTick();
     private final List<Button> topRow = new ArrayList<>();
@@ -146,6 +165,8 @@ public final class PlayerPreviewPanel extends Gui {
     private boolean hasLast;
     private File lastFile;
     private String lastName;
+    /** The pack {@link #sounds} plays from; null is vanilla, as a new PreviewSounds starts. */
+    private File soundPack;
     /** The model on screen; kept while the next pack loads so the panel never blanks. */
     private PackModel shown;
     private String shownName = "";
@@ -194,6 +215,8 @@ public final class PlayerPreviewPanel extends Gui {
         item = HeldItem.NONE;
         sim.setItem(item);
         sim.setEnchanted(settings.previewEnchanted);
+        sim.setSoundSink(sounds::play);
+        sounds.setEnabled(settings.previewSounds);
         DevShots.attach(this);
     }
 
@@ -403,6 +426,10 @@ public final class PlayerPreviewPanel extends Gui {
                     break;
                 }
             }
+        }
+        if (!Objects.equals(file, soundPack)) {
+            soundPack = file;
+            sounds.setPack(file);   // only picks the pack; nothing plays until an action on the model
         }
         PackModel next = file == null ? PreviewTextures.defaults() : PreviewTextures.get(file);
         if (next != null) {
@@ -874,6 +901,7 @@ public final class PlayerPreviewPanel extends Gui {
             return;
         }
         ticks++;
+        sounds.setEnabled(PackOrganizer.settings().previewSounds);
         sim.tick();
         subTick.tick(System.nanoTime());
         if (hasLast && lastFile != null && !lastFile.exists()) {
@@ -930,13 +958,41 @@ public final class PlayerPreviewPanel extends Gui {
         return new int[] {x, y, width, height};
     }
 
-    /** Frees the framebuffer and every preview texture and brings the cursor back; call when the screen closes. */
+    /**
+     * A pack path ("assets/minecraft/sounds/random/bow.ogg") from the default pack, which finds sounds through the
+     * assets index; null when it is missing or unreadable.
+     */
+    private static byte[] vanillaSound(String path) {
+        String prefix = "assets/minecraft/";
+        if (!path.startsWith(prefix)) {
+            return null;
+        }
+        ResourceLocation location = new ResourceLocation("minecraft", path.substring(prefix.length()));
+        IResourcePack defaultPack = Minecraft.getMinecraft().getResourcePackRepository().rprDefaultResourcePack;
+        try (InputStream in = defaultPack.getInputStream(location)) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                out.write(buf, 0, n);
+            }
+            return out.toByteArray();
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Frees the framebuffer, every preview texture and every preview sound and brings the cursor back; call when the
+     * screen closes.
+     */
     public void close() {
         hideCursor(false);
         pressed = false;
         DevShots.detach(this);
         framebuffer.delete();
         PreviewTextures.clear();
+        sounds.close();
         shown = null;
         hasLast = false;
         iconBounds.clear();
