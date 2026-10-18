@@ -13,6 +13,8 @@ public final class Projectile {
     /** Facing in degrees like Entity.rotationYaw and rotationPitch: yaw atan2(vx, vz), pitch positive upward. */
     public float yaw, pitch, prevYaw, prevPitch;
     public boolean onGround, critical;
+    /** Flew out of the view: it keeps flying unseen until it lands, so the landing still sounds, but is not drawn. */
+    public boolean hidden;
     /** Arrow shake left after sticking, counted in physics steps. */
     public int shake;
     /** Game ticks since a stuck arrow landed. */

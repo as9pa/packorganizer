@@ -484,7 +484,7 @@ public final class PlayerPreviewPanel extends Gui {
         updatePose(partial);
         // Projectiles leave along the eased head direction, turned with the spin (yaw 0 faces +z).
         sim.setAim((float) Math.toRadians(pose.spin - pose.headYaw), (float) Math.toRadians(pose.pitch));
-        // Flying projectiles 8 px past the view's sides or bottom are gone, as in the mock.
+        // Flying projectiles 8 px past the view's sides or bottom are hidden until they land.
         sim.world().setViewBounds((viewX - 8 - centerX) / block, (viewX + viewW + 8 - centerX) / block,
                 (feetY - (viewY + viewH + 8)) / block);
 

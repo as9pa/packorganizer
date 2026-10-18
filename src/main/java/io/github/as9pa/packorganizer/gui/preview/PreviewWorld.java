@@ -66,6 +66,10 @@ public final class PreviewWorld {
 
         Projectile bobber = null;
         for (Projectile p : projectiles) {
+            // Off the view and flying on to its landing sound; never drawn again.
+            if (p.hidden) {
+                continue;
+            }
             double x = p.drawX(partial), y = p.drawY(partial), z = p.drawZ(partial);
             float ds = depthScale(z);
             switch (p.kind) {

@@ -23,6 +23,8 @@ public final class PreviewPhysics {
     static final int ARROW_GROUND_TICKS = 100;
     /** A pearl that has not landed after 1.5 s arrives anyway. */
     static final int PEARL_MAX_TICKS = 30;
+    /** A hidden projectile still flying this many ticks after the throw is dropped, with no landing. */
+    static final int HIDDEN_MAX_TICKS = 200;
     static final double MAX_ABS_Z = 6;
     /** The cast is shortened so the bobber lands about this far out. */
     static final double CAST_DISTANCE = 2;
@@ -65,7 +67,10 @@ public final class PreviewPhysics {
         pitch = pitchRad;
     }
 
-    /** Flying projectiles past these (blocks) are removed; above the top they are kept, the arc brings them back. */
+    /**
+     * Flying projectiles past these (blocks) are hidden until they land; above the top they stay shown, the arc
+     * brings them back.
+     */
     public void setViewBounds(double minX, double maxX, double minY) {
         this.minX = minX;
         this.maxX = maxX;
@@ -77,12 +82,15 @@ public final class PreviewPhysics {
         onPearlLanded = listener;
     }
 
-    /** Runs when an arrow sticks in the ground; one that flies off the view is removed without it. */
+    /** Runs when an arrow sticks in the ground, also one that flew off the view and lands unseen. */
     public void setOnArrowLanded(Runnable listener) {
         onArrowLanded = listener;
     }
 
-    /** Runs when a splash potion shatters on the ground, after its particles; one that flies off does not. */
+    /**
+     * Runs when a splash potion shatters on the ground, after its particles; one that flew off the view runs it when
+     * it lands unseen, with no particles.
+     */
     public void setOnPotionBroke(Runnable listener) {
         onPotionBroke = listener;
     }
@@ -207,6 +215,7 @@ public final class PreviewPhysics {
         }
     }
 
+    /** Every projectile still in flight or stuck, hidden ones included; drawing skips the hidden. */
     public List<Projectile> projectiles() {
         return projectileView;
     }
@@ -240,10 +249,16 @@ public final class PreviewPhysics {
             }
         }
         // The bobber stays cast wherever it goes (the view clips it); only reeling in removes it.
-        if (!p.onGround && p.kind != Projectile.Kind.BOBBER && (outside(p) || Math.abs(p.z) > MAX_ABS_Z
-                || (p.kind == Projectile.Kind.PEARL && p.age > PEARL_MAX_TICKS))) {
-            gone(p);
-            return;
+        if (!p.onGround && p.kind != Projectile.Kind.BOBBER) {
+            if ((p.kind == Projectile.Kind.PEARL && p.age > PEARL_MAX_TICKS)
+                    || (p.hidden && p.age > HIDDEN_MAX_TICKS)) {
+                gone(p);
+                return;
+            }
+            // Off the view it flies on unseen, so its landing still sounds.
+            if (outside(p) || Math.abs(p.z) > MAX_ABS_Z) {
+                p.hidden = true;
+            }
         }
         p.px = p.x;
         p.py = p.y;
@@ -322,10 +337,16 @@ public final class PreviewPhysics {
             if (onArrowLanded != null) {
                 onArrowLanded.run();
             }
+            // Nobody sees a hidden arrow stick, so it does not stay.
+            if (p.hidden) {
+                gone(p);
+            }
         } else if (p.kind == Projectile.Kind.PEARL) {
             gone(p);
         } else if (p.kind == Projectile.Kind.POTION) {
-            shatter(p.x, p.z);
+            if (!p.hidden) {
+                shatter(p.x, p.z);
+            }
             gone(p);
             if (onPotionBroke != null) {
                 onPotionBroke.run();
@@ -384,10 +405,10 @@ public final class PreviewPhysics {
 
     /**
      * EntityArrow's crit trail: 4 EntityCritFX at quarters of the segment the arrow is about to be drawn along, all
-     * at once, with 0.4 of (-motion + 0.2 up) as their speed. None on the landing segment.
+     * at once, with 0.4 of (-motion + 0.2 up) as their speed. None on the landing segment, none while hidden.
      */
     private void critTrail(Projectile p) {
-        if (!p.critical || p.onGround) {
+        if (!p.critical || p.onGround || p.hidden) {
             return;
         }
         double mx = p.x - p.px, my = p.y - p.py, mz = p.z - p.pz;
