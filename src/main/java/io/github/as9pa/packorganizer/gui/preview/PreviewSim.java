@@ -52,11 +52,11 @@ public final class PreviewSim {
         this.rnd = rnd;
         this.soundRnd = soundRnd;
         physics = new PreviewPhysics(rnd);
-        // EntityEnderPearl.onImpact: portal particles around the thrower and the fall damage flash and hurt sound.
+        // EntityEnderPearl.onImpact: portal particles around the thrower. The owner chose no fall damage here and
+        // the enderman teleport sound (EntityEnderman.teleportTo: mob.endermen.portal, volume 1, pitch 1) instead.
         physics.setOnPearlLanded(() -> {
             physics.portalBurst();
-            hurtTicks = HURT_TICKS;
-            sounds.sound(PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(soundRnd));
+            sounds.sound(PreviewSound.TELEPORT, 1f, 1f);
         });
         // EntityArrow hitting a block, and RenderGlobal.playAuxSFX 2002 for the potion.
         physics.setOnArrowLanded(() ->

@@ -11,7 +11,8 @@ public enum PreviewSound {
     BOW_HIT("random.bowhit", "random/bowhit1", "random/bowhit2", "random/bowhit3", "random/bowhit4"),
     EAT("random.eat", "random/eat1", "random/eat2", "random/eat3"),
     BURP("random.burp", "random/burp"),
-    GLASS("game.potion.smash", "random/glass1", "random/glass2", "random/glass3");
+    GLASS("game.potion.smash", "random/glass1", "random/glass2", "random/glass3"),
+    TELEPORT("mob.endermen.portal", "mob/endermen/portal", "mob/endermen/portal2");
 
     /** Where a pack keeps its sound files. */
     static final String ROOT = "assets/minecraft/sounds/";
