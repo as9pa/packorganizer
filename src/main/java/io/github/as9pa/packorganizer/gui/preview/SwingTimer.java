@@ -30,6 +30,11 @@ public final class SwingTimer {
         }
     }
 
+    /** True from the swing until its last tick has run. */
+    public boolean swinging() {
+        return swinging;
+    }
+
     /**
      * 0..1 through the swing, 0 when idle. At {@code partialTicks} 0 this is vanilla
      * {@code swingProgress}; between ticks it runs on toward the next value.

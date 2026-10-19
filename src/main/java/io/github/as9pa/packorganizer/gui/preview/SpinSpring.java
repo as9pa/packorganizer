@@ -15,6 +15,10 @@ public final class SpinSpring {
     /** Frame gaps beyond this are not simulated; the spring has long settled by then. */
     private static final float MAX_SECONDS = 10;
 
+    /** Closer to front than this (degrees) and slower than {@link #SETTLED_SPEED} (degrees a second) is at rest. */
+    static final float SETTLED_DEG = 0.05f;
+    static final float SETTLED_SPEED = 0.05f;
+
     private float angle;
     /** Degrees per second. */
     private float velocity;
@@ -83,5 +87,10 @@ public final class SpinSpring {
 
     public boolean dragging() {
         return dragging;
+    }
+
+    /** Not dragged and back at rest facing front, within {@link #SETTLED_DEG} and {@link #SETTLED_SPEED}. */
+    public boolean settled() {
+        return !dragging && Math.abs(angle) < SETTLED_DEG && Math.abs(velocity) < SETTLED_SPEED;
     }
 }

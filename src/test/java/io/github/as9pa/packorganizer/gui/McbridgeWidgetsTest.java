@@ -1,5 +1,6 @@
 package io.github.as9pa.packorganizer.gui;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
@@ -75,5 +76,27 @@ public class McbridgeWidgetsTest {
     public void pickValueShowsHueAndLightness() {
         assertEquals("hue 120.0, lightness 0.500", McbridgeWidgets.pickValue(true, 120, 0.5));
         assertEquals("hue 0.3, lightness 0.125", McbridgeWidgets.pickValue(true, 0.25, 0.125));
+    }
+
+    @Test
+    public void outfitValueNamesTheItemAndArmor() {
+        assertEquals("item bow, armor diamond", McbridgeWidgets.outfitValue("bow", "diamond"));
+        assertEquals("item none, armor none", McbridgeWidgets.outfitValue("none", null));
+    }
+
+    @Test
+    public void modelBoundsWrapThePartCornersInsideTheView() {
+        List<float[]> parts = Arrays.asList(new float[] {50.5f, 40.2f, 60f, 90.7f}, new float[] {45f, 60f, 70.1f, 30f});
+        assertArrayEquals(new int[] {45, 30, 26, 61}, McbridgeWidgets.modelBounds(parts, 0, 0, 200, 200));
+        // Clipped to the view where it overflows.
+        assertArrayEquals(new int[] {50, 35, 21, 45}, McbridgeWidgets.modelBounds(parts, 50, 35, 100, 45));
+    }
+
+    @Test
+    public void modelBoundsFallBackToTheViewWithNothingDrawnInIt() {
+        int[] view = {10, 20, 30, 40};
+        assertArrayEquals(view, McbridgeWidgets.modelBounds(new ArrayList<float[]>(), 10, 20, 30, 40));
+        List<float[]> outside = Arrays.<float[]>asList(new float[] {100f, 100f, 110f, 120f});
+        assertArrayEquals(view, McbridgeWidgets.modelBounds(outside, 10, 20, 30, 40));
     }
 }

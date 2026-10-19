@@ -215,6 +215,19 @@ public final class PreviewPhysics {
         }
     }
 
+    /**
+     * True while an arrow, pearl or potion has not landed (hidden ones included) or a stuck arrow still shakes. The
+     * bobber is left out: it stays cast until reeled in.
+     */
+    public boolean flying() {
+        for (Projectile p : projectiles) {
+            if (p.kind != Projectile.Kind.BOBBER && (!p.stuck || p.shake > 0)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Every projectile still in flight or stuck, hidden ones included; drawing skips the hidden. */
     public List<Projectile> projectiles() {
         return projectileView;

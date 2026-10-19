@@ -249,6 +249,14 @@ public final class PreviewSim {
         return left > 0 ? HURT_TINT * Math.min(1f, left) : 0f;
     }
 
+    /**
+     * True while something on the model is still moving toward rest: an item use, a swing, the hurt tint or an
+     * arrow, pearl or potion in the air. The apple's effects, their swirls and a cast rod last on and do not count.
+     */
+    public boolean animating() {
+        return using || swing.swinging() || hurtTicks > 0 || physics.flying();
+    }
+
     public PreviewPhysics world() {
         return physics;
     }

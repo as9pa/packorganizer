@@ -95,6 +95,38 @@ public final class McbridgeWidgets {
         return picked ? String.format(Locale.ROOT, "hue %.1f, lightness %.3f", hue, lightness) : "none";
     }
 
+    /** The player preview's outfit as mcbridge shows it: "item bow, armor diamond", a null armor is "none". */
+    public static String outfitValue(String item, String armor) {
+        return "item " + item + ", armor " + (armor == null ? "none" : armor);
+    }
+
+    /**
+     * {x, y, w, h} around the model's drawn part corners (x, y pairs in GUI px) clipped to the view, where a click can
+     * land on it; the whole view when nothing was drawn or the model is out of it.
+     */
+    public static int[] modelBounds(List<float[]> partCorners, int viewX, int viewY, int viewW, int viewH) {
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        for (float[] corners : partCorners) {
+            for (int i = 0; i + 1 < corners.length; i += 2) {
+                minX = Math.min(minX, corners[i]);
+                maxX = Math.max(maxX, corners[i]);
+                minY = Math.min(minY, corners[i + 1]);
+                maxY = Math.max(maxY, corners[i + 1]);
+            }
+        }
+        int x0 = Math.max(viewX, (int) Math.floor(minX));
+        int y0 = Math.max(viewY, (int) Math.floor(minY));
+        int x1 = Math.min(viewX + viewW, (int) Math.ceil(maxX));
+        int y1 = Math.min(viewY + viewH, (int) Math.ceil(maxY));
+        if (!(minX <= maxX) || x1 <= x0 || y1 <= y0) {
+            return new int[] {viewX, viewY, viewW, viewH};
+        }
+        return new int[] {x0, y0, x1 - x0, y1 - y0};
+    }
+
     /** The search box, the resolution chips, the Previews toggle, and the Color chip and wheel when there are any. */
     public static void describeToolbar(PacksToolbar toolbar, List<Object> out) {
         GuiTextField search = toolbar.searchField();

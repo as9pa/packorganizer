@@ -909,6 +909,50 @@ public final class PlayerPreviewPanel extends Gui {
         }
     }
 
+    /**
+     * For mcbridge, once the panel shows: the panel with the outfit as its value, the model where a click can land,
+     * then each armor, Enchanted and item button. See {@link McbridgeWidgets}.
+     */
+    public void describeInto(List<Object> out) {
+        if (!visible()) {
+            return;
+        }
+        Settings settings = PackOrganizer.settings();
+        McbridgeWidgets.add(out, "preview", McbridgeWidgets.OTHER, x, y, width, height)
+                .label(TITLE).value(McbridgeWidgets.outfitValue(settings.previewItem, settings.previewArmor));
+        int[] model = McbridgeWidgets.modelBounds(renderer.lastPartCorners(), viewX, viewY, viewW, viewH);
+        McbridgeWidgets.add(out, "preview:model", McbridgeWidgets.OTHER, model[0], model[1], model[2], model[3])
+                .label("Player model").parent("preview");
+        for (Button b : buttons) {
+            String id;
+            switch (b.kind) {
+                case ARMOR:
+                    id = "preview:armor:" + b.id;
+                    break;
+                case ENCHANTED:
+                    id = "preview:enchanted";
+                    break;
+                default:
+                    id = "preview:item:" + b.id;
+                    break;
+            }
+            McbridgeWidgets.Widget widget = McbridgeWidgets.add(out, id, McbridgeWidgets.TOGGLE, b.x, b.y, BUTTON, BUTTON)
+                    .label(b.kind == Kind.ENCHANTED ? "Enchanted" : b.id).enabled(true).selected(active(b))
+                    .parent("preview");
+            if (b.kind == Kind.ENCHANTED) {
+                widget.checked(active(b));
+            }
+        }
+    }
+
+    /**
+     * For mcbridge's idle: true while an item use, swing, hurt tint or flying arrow, pearl or potion runs, or the
+     * model is dragged or still turning back. The sky and the model's breathing run on and do not count.
+     */
+    public boolean animating() {
+        return sim.animating() || !spin.settled();
+    }
+
     /** DevShots only: forces the shown pack ({@code forced} false is nothing hovered), the mouse and a spin. */
     public void debugOverride(boolean forced, File pack, String name, int mouseX, int mouseY, float spinDeg) {
         debug = true;

@@ -225,12 +225,18 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         if (packorganizer$toolbar != null) {
             McbridgeWidgets.describeToolbar(packorganizer$toolbar, out);
         }
-        // The player preview's widgets go here, after the toolbar's.
+        if (packorganizer$playerPreview != null) {
+            packorganizer$playerPreview.describeInto(out);
+        }
         return out;
     }
 
-    /** For mcbridge, by reflection like {@link #mcbridgeDescribe()}: true when no preview is loading. */
+    /**
+     * For mcbridge, by reflection like {@link #mcbridgeDescribe()}: true when no preview is loading and the shown
+     * player preview has nothing in motion.
+     */
     public boolean mcbridgeIdle() {
-        return PreviewCache.idle();
+        return PreviewCache.idle() && (packorganizer$playerPreview == null || !packorganizer$playerPreview.visible()
+                || !packorganizer$playerPreview.animating());
     }
 }
