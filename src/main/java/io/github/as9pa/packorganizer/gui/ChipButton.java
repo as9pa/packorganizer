@@ -6,18 +6,28 @@ import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.renderer.GlStateManager;
 
-/** A vanilla-looking button that keeps the hovered look while its chip is the active filter. */
+/**
+ * A vanilla-looking button that keeps the hovered look while its chip is the active filter, or, for an
+ * on/off toggle that only looks like a chip, while the toggle is on.
+ */
 public final class ChipButton extends GuiButton {
     public static final int HEIGHT = 20;
     private static final int TEXT_NORMAL = 0xE0E0E0;
     private static final int TEXT_HOVER = 0xFFFFA0;
 
+    /** Null for a toggle. */
     public final PackFilter.Chip chip;
     private boolean active;
 
     public ChipButton(int id, int x, int y, int width, PackFilter.Chip chip) {
         super(id, x, y, width, HEIGHT, chip.label);
         this.chip = chip;
+    }
+
+    /** An on/off toggle in the chip style; {@link #setActive} shows its state. */
+    public ChipButton(int id, int x, int y, int width, String label) {
+        super(id, x, y, width, HEIGHT, label);
+        this.chip = null;
     }
 
     public boolean isActive() {

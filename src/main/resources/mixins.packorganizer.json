@@ -11,7 +11,8 @@
     "MixinGuiResourcePackList",
     "MixinGuiScreenResourcePacks",
     "MixinResourcePackListEntry",
-    "MixinGuiSlot"
+    "MixinGuiSlot",
+    "MixinMinecraft"
   ],
   "injectors": { "defaultRequire": 1 }
 }

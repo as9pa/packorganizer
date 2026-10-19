@@ -28,6 +28,15 @@ public class PreviewSpecTest {
     }
 
     @Test
+    public void layerPathsAppendThePotionOverlayToTheCells() {
+        assertEquals(PreviewSpec.PATHS.get(PreviewSpec.POTION), PreviewSpec.PATHS.get(11));
+        assertEquals(PreviewSpec.CELLS + 1, PreviewSpec.LAYER_PATHS.size());
+        assertEquals(PreviewSpec.PATHS, PreviewSpec.LAYER_PATHS.subList(0, PreviewSpec.CELLS));
+        assertEquals("assets/minecraft/textures/items/potion_overlay.png",
+                PreviewSpec.LAYER_PATHS.get(PreviewSpec.OVERLAY));
+    }
+
+    @Test
     public void heartCropScalesWithIconsWidth() {
         assertArrayEquals(new int[] {52, 0, 9, 9}, PreviewSpec.heartCrop(256));
         assertArrayEquals(new int[] {104, 0, 18, 18}, PreviewSpec.heartCrop(512));

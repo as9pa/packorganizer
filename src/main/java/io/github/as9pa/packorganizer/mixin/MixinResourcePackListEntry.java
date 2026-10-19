@@ -3,15 +3,19 @@ package io.github.as9pa.packorganizer.mixin;
 import io.github.as9pa.packorganizer.EntryExtension;
 import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.filter.PreviewSpec;
+import io.github.as9pa.packorganizer.gui.PacksToolbar;
+import io.github.as9pa.packorganizer.gui.PlayerPreviewPanel;
 import io.github.as9pa.packorganizer.gui.PreviewCache;
 import io.github.as9pa.packorganizer.gui.RowBadge;
 import io.github.as9pa.packorganizer.gui.RowLayout;
+import io.github.as9pa.packorganizer.gui.RowLook;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreenResourcePacks;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.resources.ResourcePackListEntry;
+import net.minecraft.client.resources.ResourcePackListEntryDefault;
 import net.minecraft.client.resources.ResourcePackListEntryFound;
 import net.minecraft.client.resources.ResourcePackRepository;
 import org.spongepowered.asm.mixin.Final;
@@ -30,12 +34,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Indents rows by folder depth, draws the resolution badge on every row, and shortens the name
  * trim so the badge and indent never overlap the text. While a Found row is hovered and its preview is
- * ready, the name and description give way to a 2x8 grid of the pack's textures.
+ * ready, the name and description give way to a 2x8 grid of the pack's textures. In Previews mode
+ * (listPreviews) every on-screen Found row shows its grid instead, and the hovered row its text; a grid row keeps
+ * its badge only where the badge clears the grid. See {@link RowLook}.
  */
 @Mixin(ResourcePackListEntry.class)
 public abstract class MixinResourcePackListEntry implements RowLayout {
     @Shadow @Final protected Minecraft mc;
     @Shadow @Final protected GuiScreenResourcePacks resourcePacksGUI;
+
+    /** The row name as drawn, formatting codes included. */
+    @Shadow protected abstract String func_148312_b();
 
     /** Preview grid start, right of the 32 px icon, from the shifted x. */
     @Unique private static final int PREVIEW_OFFSET = 34;
@@ -45,6 +54,8 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     @Unique private int packorganizer$rowDepth;
     /** Set at drawEntry HEAD, cleared at RETURN: the preview to draw instead of the text, or null. */
     @Unique private PreviewCache.Preview packorganizer$preview;
+    /** Set at drawEntry HEAD with the preview: true when the row's look drops the badge. */
+    @Unique private boolean packorganizer$hideBadge;
 
     @Override
     public void packorganizer$setDepth(int depth) {
@@ -89,19 +100,47 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         return vanillaWidth - packorganizer$indentPx();
     }
 
-    /** isSelected is the hover flag. The first hover starts the background load; text hides once it is ready. */
+    /**
+     * isSelected is the hover flag. A hovered pack row is offered to the player preview. The first hover (or, in
+     * Previews mode, the first frame on screen) starts the background load; RowLook picks text or grid once it is
+     * ready. Off-screen rows request nothing, since vanilla draws every row of the list each frame.
+     */
     @Inject(method = "drawEntry", at = @At("HEAD"))
     private void packorganizer$lookUpPreview(int slotIndex, int x, int y, int listWidth, int slotHeight,
                                              int mouseX, int mouseY, boolean isSelected, CallbackInfo ci) {
         packorganizer$preview = null;
-        if (!isSelected || !PackOrganizer.settings().packPreviews
+        packorganizer$hideBadge = false;
+        if (isSelected) {
+            packorganizer$offerHover();
+        }
+        boolean listPreviews = PackOrganizer.settings().listPreviews;
+        boolean wanted = isSelected || listPreviews && RowLook.onScreen(y, slotHeight,
+                PacksToolbar.LIST_TOP, resourcePacksGUI.height - PacksToolbar.LIST_BOTTOM_INSET);
+        if (!wanted || !PackOrganizer.settings().packPreviews
                 || !((Object) this instanceof ResourcePackListEntryFound)) {
             return;
         }
         ResourcePackRepository.Entry pack = ((ResourcePackListEntryFound) (Object) this).func_148318_i();
         // Defensive: if the Entry mixin did not apply, there is no pack file to read.
-        if (pack instanceof EntryExtension && ((EntryExtension) pack).packorganizer$file() != null) {
-            packorganizer$preview = PreviewCache.get(((EntryExtension) pack).packorganizer$file());
+        if (!(pack instanceof EntryExtension) || ((EntryExtension) pack).packorganizer$file() == null) {
+            return;
+        }
+        PreviewCache.Preview preview = PreviewCache.get(((EntryExtension) pack).packorganizer$file());
+        RowLook look = RowLook.of(listPreviews, isSelected, preview != null);
+        packorganizer$preview = look.strip ? preview : null;
+        packorganizer$hideBadge = !look.label;
+    }
+
+    /** Found rows offer their pack file, the Default row offers no file (the vanilla look); folder rows nothing. */
+    @Unique
+    private void packorganizer$offerHover() {
+        if ((Object) this instanceof ResourcePackListEntryDefault) {
+            PlayerPreviewPanel.offerHover(null, func_148312_b());
+        } else if ((Object) this instanceof ResourcePackListEntryFound) {
+            ResourcePackRepository.Entry pack = ((ResourcePackListEntryFound) (Object) this).func_148318_i();
+            if (pack instanceof EntryExtension && ((EntryExtension) pack).packorganizer$file() != null) {
+                PlayerPreviewPanel.offerHover(((EntryExtension) pack).packorganizer$file(), func_148312_b());
+            }
         }
     }
 
@@ -127,12 +166,13 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
             RowLayout.drawGuides(originalX, y, slotHeight, packorganizer$rowDepth);
         }
         PreviewCache.Preview preview = packorganizer$preview;
+        boolean hideBadge = packorganizer$hideBadge;
         packorganizer$preview = null;
-        if (preview != null) {
-            packorganizer$drawPreview(preview, x, y, originalX + listWidth, slotHeight);
-            return;
-        }
-        if (!PackOrganizer.settings().resolutionLabels) {
+        packorganizer$hideBadge = false;
+        int stripRight = preview != null
+                ? packorganizer$drawPreview(preview, x, y, originalX + listWidth, slotHeight)
+                : Integer.MIN_VALUE;
+        if (hideBadge || !PackOrganizer.settings().resolutionLabels) {
             return;
         }
         String badge = RowBadge.text((ResourcePackListEntry) (Object) this);
@@ -141,15 +181,20 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         }
         FontRenderer font = mc.fontRendererObj;
         int right = originalX + RowBadge.RIGHT_EDGE;
-        font.drawStringWithShadow(badge, right - font.getStringWidth(badge), y + 1, RowBadge.COLOUR);
+        int width = font.getStringWidth(badge);
+        // A strip row keeps its badge only where the badge clears the strip; indents push the strip into it.
+        if (preview != null && !RowLook.labelFits(stripRight, right, width)) {
+            return;
+        }
+        font.drawStringWithShadow(badge, right - width, y + 1, RowBadge.COLOUR);
     }
 
     /**
      * 2x8 cells of 16 px right of the icon; 12 px when 16 would pass the row edge (deep indents).
-     * Cells the pack does not override are drawn dimmed.
+     * Cells the pack does not override are drawn dimmed. Returns the strip's right end.
      */
     @Unique
-    private void packorganizer$drawPreview(PreviewCache.Preview preview, int x, int y, int rowEdge, int slotHeight) {
+    private int packorganizer$drawPreview(PreviewCache.Preview preview, int x, int y, int rowEdge, int slotHeight) {
         int left = x + PREVIEW_OFFSET;
         int cell = left + PreviewSpec.COLUMNS * PREVIEW_CELL > rowEdge ? PREVIEW_CELL_SMALL : PREVIEW_CELL;
         int top = y + (slotHeight - PreviewSpec.ROWS * cell) / 2;
@@ -170,6 +215,7 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         }
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
         GlStateManager.disableBlend();
+        return left + PreviewSpec.COLUMNS * cell;
     }
 
     /**

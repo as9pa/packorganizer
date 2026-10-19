@@ -2,6 +2,7 @@ package io.github.as9pa.packorganizer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -9,8 +10,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -121,5 +124,163 @@ public class SettingsTest {
         first.colorFilter = false;
         Settings.saveNow();
         assertFalse(Settings.load(new File(dir, "settings.json")).colorFilter);
+    }
+
+    @Test
+    public void newPreviewDefaults() {
+        Settings s = new Settings();
+        assertTrue(s.playerPreview);
+        assertTrue(s.skyBackdrop);
+        assertTrue(s.skyCycle);
+        assertTrue(s.showCape);
+        assertNull(s.previewArmor);
+        assertEquals("none", s.previewItem);
+        assertFalse(s.previewEnchanted);
+    }
+
+    @Test
+    public void previewFieldsRoundTrip() {
+        Settings s = Settings.load(json());
+        s.playerPreview = false;
+        s.skyBackdrop = false;
+        s.skyCycle = false;
+        s.showCape = false;
+        s.previewArmor = "gold";
+        s.previewItem = "bow";
+        s.previewEnchanted = true;
+        s.save(json());
+
+        Settings r = Settings.load(json());
+        assertFalse(r.playerPreview);
+        assertFalse(r.skyBackdrop);
+        assertFalse(r.skyCycle);
+        assertFalse(r.showCape);
+        assertTrue(r.previewEnchanted);
+        // The preview always opens bare and on the fist, so armor and item are never written.
+        assertNull(r.previewArmor);
+        assertEquals("none", r.previewItem);
+    }
+
+    @Test
+    public void armorAndItemAreNotSaved() throws IOException {
+        Settings s = new Settings();
+        s.previewArmor = "gold";
+        s.previewItem = "bow";
+        s.save(json());
+        String text = new String(Files.readAllBytes(json().toPath()), StandardCharsets.UTF_8);
+        assertFalse(text.contains("previewArmor"));
+        assertFalse(text.contains("previewItem"));
+        assertTrue(text.contains("previewEnchanted"));
+    }
+
+    @Test
+    public void oldArmorAndItemKeysAreIgnored() throws IOException {
+        writeJson("{\"previewArmor\": \"gold\", \"previewItem\": \"bow\", \"previewEnchanted\": true,"
+                + " \"showCape\": false}");
+        Settings r = Settings.load(json());
+        assertNull(r.previewArmor);
+        assertEquals("none", r.previewItem);
+        assertTrue(r.previewEnchanted);
+        assertFalse(r.showCape);
+    }
+
+    @Test
+    public void switchesAreListedInOrder() {
+        List<String> labels = new ArrayList<>();
+        for (Settings.Switch sw : Settings.SWITCHES) {
+            labels.add(sw.label);
+        }
+        assertEquals(Arrays.asList(
+                "Pack previews", "Transparent background", "Pack folders",
+                "Color filter", "Resolution labels", "Remember open folders",
+                "Player preview", "Pack sky backdrop", "Sky day cycle", "Show cape", "Hit tint",
+                "Preview sounds"), labels);
+    }
+
+    @Test
+    public void previewSoundsDefaultsOnAndRoundTripsOff() {
+        assertTrue(new Settings().previewSounds);
+        Settings s = Settings.load(json());
+        assertTrue(s.previewSounds);
+        s.previewSounds = false;
+        s.save(json());
+        assertFalse(Settings.load(json()).previewSounds);
+        s.previewSounds = true;
+        s.save(json());
+        assertTrue(Settings.load(json()).previewSounds);
+    }
+
+    @Test
+    public void hitTintDefaultsOnAndRoundTripsOff() {
+        assertTrue(new Settings().previewHitTint);
+        Settings s = Settings.load(json());
+        s.previewHitTint = false;
+        s.save(json());
+        assertFalse(Settings.load(json()).previewHitTint);
+        s.previewHitTint = true;
+        s.save(json());
+        assertTrue(Settings.load(json()).previewHitTint);
+    }
+
+    @Test
+    public void listPreviewsDefaultsOffAndRoundTrips() throws IOException {
+        assertFalse(new Settings().listPreviews);
+        Settings s = Settings.load(json());
+        assertFalse(s.listPreviews);
+        s.listPreviews = true;
+        s.save(json());
+        String text = new String(Files.readAllBytes(json().toPath()), StandardCharsets.UTF_8);
+        assertTrue(text.contains("\"listPreviews\""));
+        assertTrue(Settings.load(json()).listPreviews);
+        s.listPreviews = false;
+        s.save(json());
+        assertFalse(Settings.load(json()).listPreviews);
+    }
+
+    @Test
+    public void oldSettingsWithoutListPreviewsLoadItOff() throws IOException {
+        writeJson("{\"packPreviews\": true, \"previewHitTint\": false, \"showCape\": true}");
+        Settings s = Settings.load(json());
+        assertFalse(s.listPreviews);
+        assertFalse(s.previewHitTint);
+        assertTrue(s.previewSounds);
+    }
+
+    @Test
+    public void listPreviewsIsNotOnTheSettingsScreen() {
+        // The owner chose the toolbar toggle only; no switch may touch the field.
+        for (Settings.Switch sw : Settings.SWITCHES) {
+            Settings s = new Settings();
+            sw.set(s, !sw.get(s));
+            assertFalse("switch " + sw.label, s.listPreviews);
+        }
+    }
+
+    @Test
+    public void everySwitchTogglesOnlyItsOwnField() {
+        for (int i = 0; i < Settings.SWITCHES.size(); i++) {
+            Settings s = new Settings();
+            boolean[] before = snapshot(s);
+            Settings.Switch sw = Settings.SWITCHES.get(i);
+            sw.set(s, !sw.get(s));
+            boolean[] after = snapshot(s);
+            int changed = 0;
+            for (int j = 0; j < before.length; j++) {
+                if (before[j] != after[j]) {
+                    changed++;
+                }
+            }
+            assertEquals("switch " + sw.label, 1, changed);
+        }
+    }
+
+    /** Every boolean setting in a fixed order, including Enchanted and list previews which have no switch. */
+    private static boolean[] snapshot(Settings s) {
+        return new boolean[] {
+                s.packPreviews, s.transparentBackground, s.packFolders, s.colorFilter,
+                s.resolutionLabels, s.rememberOpenFolders,
+                s.playerPreview, s.skyBackdrop, s.skyCycle, s.showCape, s.previewHitTint, s.previewSounds,
+                s.previewEnchanted, s.listPreviews
+        };
     }
 }

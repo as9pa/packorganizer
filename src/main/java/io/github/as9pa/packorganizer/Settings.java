@@ -18,8 +18,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 
 /**
  * User settings, stored as config/packorganizer/settings.json.
@@ -35,6 +40,60 @@ public final class Settings {
     public boolean resolutionLabels = true;
     public boolean rememberOpenFolders = true;
     public Set<String> openFolders = new LinkedHashSet<>();
+    public boolean playerPreview = true;
+    public boolean skyBackdrop = true;
+    public boolean skyCycle = true;
+    public boolean previewHitTint = true;
+    public boolean previewSounds = true;
+    public boolean showCape = true;
+    /** Preview armor from ARMORS, null for none. Not saved: each opening of the screen starts with no armor. */
+    public String previewArmor = null;
+    /** Preview item from ITEMS, or "none" for the empty hand. Not saved: each opening starts on the fist. */
+    public String previewItem = "none";
+    public boolean previewEnchanted = false;
+    /** Pack list rows show item previews. Set by the toolbar's Previews toggle; not on the settings screen. */
+    public boolean listPreviews = false;
+
+    public static final List<String> ARMORS = Collections.unmodifiableList(Arrays.asList(
+            "leather", "chainmail", "iron", "gold", "diamond"));
+    public static final List<String> ITEMS = Collections.unmodifiableList(Arrays.asList(
+            "sword", "bow", "ender_pearl", "golden_apple", "splash_potion", "fishing_rod"));
+
+    /** One ON/OFF toggle on the settings screen, bound to exactly one boolean field. */
+    public static final class Switch {
+        public final String label;
+        private final Predicate<Settings> getter;
+        private final BiConsumer<Settings, Boolean> setter;
+
+        Switch(String label, Predicate<Settings> getter, BiConsumer<Settings, Boolean> setter) {
+            this.label = label;
+            this.getter = getter;
+            this.setter = setter;
+        }
+
+        public boolean get(Settings s) {
+            return getter.test(s);
+        }
+
+        public void set(Settings s, boolean v) {
+            setter.accept(s, v);
+        }
+    }
+
+    /** Settings screen order. Index is the button id. */
+    public static final List<Switch> SWITCHES = Collections.unmodifiableList(Arrays.asList(
+            new Switch("Pack previews", s -> s.packPreviews, (s, v) -> s.packPreviews = v),
+            new Switch("Transparent background", s -> s.transparentBackground, (s, v) -> s.transparentBackground = v),
+            new Switch("Pack folders", s -> s.packFolders, (s, v) -> s.packFolders = v),
+            new Switch("Color filter", s -> s.colorFilter, (s, v) -> s.colorFilter = v),
+            new Switch("Resolution labels", s -> s.resolutionLabels, (s, v) -> s.resolutionLabels = v),
+            new Switch("Remember open folders", s -> s.rememberOpenFolders, (s, v) -> s.rememberOpenFolders = v),
+            new Switch("Player preview", s -> s.playerPreview, (s, v) -> s.playerPreview = v),
+            new Switch("Pack sky backdrop", s -> s.skyBackdrop, (s, v) -> s.skyBackdrop = v),
+            new Switch("Sky day cycle", s -> s.skyCycle, (s, v) -> s.skyCycle = v),
+            new Switch("Show cape", s -> s.showCape, (s, v) -> s.showCape = v),
+            new Switch("Hit tint", s -> s.previewHitTint, (s, v) -> s.previewHitTint = v),
+            new Switch("Preview sounds", s -> s.previewSounds, (s, v) -> s.previewSounds = v)));
 
     private static Settings current;
     private static File currentFile;
@@ -93,6 +152,14 @@ public final class Settings {
                 }
             }
         }
+        s.playerPreview = bool(root, "playerPreview", s.playerPreview);
+        s.skyBackdrop = bool(root, "skyBackdrop", s.skyBackdrop);
+        s.skyCycle = bool(root, "skyCycle", s.skyCycle);
+        s.previewHitTint = bool(root, "previewHitTint", s.previewHitTint);
+        s.previewSounds = bool(root, "previewSounds", s.previewSounds);
+        s.showCape = bool(root, "showCape", s.showCape);
+        s.previewEnchanted = bool(root, "previewEnchanted", s.previewEnchanted);
+        s.listPreviews = bool(root, "listPreviews", s.listPreviews);
         return s;
     }
 
@@ -112,6 +179,14 @@ public final class Settings {
             }
         }
         root.add("openFolders", folders);
+        root.addProperty("playerPreview", playerPreview);
+        root.addProperty("skyBackdrop", skyBackdrop);
+        root.addProperty("skyCycle", skyCycle);
+        root.addProperty("previewHitTint", previewHitTint);
+        root.addProperty("previewSounds", previewSounds);
+        root.addProperty("showCape", showCape);
+        root.addProperty("previewEnchanted", previewEnchanted);
+        root.addProperty("listPreviews", listPreviews);
 
         File tmp = new File(file.getPath() + ".tmp");
         try {
