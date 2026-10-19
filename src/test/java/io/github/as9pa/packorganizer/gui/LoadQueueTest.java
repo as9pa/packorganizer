@@ -1,7 +1,9 @@
 package io.github.as9pa.packorganizer.gui;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -111,5 +113,17 @@ public class LoadQueueTest {
         queue.clear();
         assertEquals(0, queue.size());
         assertNull(queue.next(20));
+    }
+
+    @Test
+    public void isEmptyFollowsRequestsTakesAndStaleDrops() {
+        assertTrue(queue.isEmpty());
+        queue.request("a", 0);
+        assertFalse(queue.isEmpty());
+        assertEquals("a", queue.next(10));
+        assertTrue(queue.isEmpty());
+        queue.request("b", 0);
+        assertNull(queue.next(501));
+        assertTrue(queue.isEmpty());
     }
 }

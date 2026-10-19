@@ -161,6 +161,39 @@ public final class PacksToolbar {
         return search.getText();
     }
 
+    // Read by McbridgeWidgets to describe the toolbar to the mcbridge automation mod.
+
+    GuiTextField searchField() {
+        return search;
+    }
+
+    /** The search box's slot: its left edge and width, border included; it spans the toolbar's height at {@link #top()}. */
+    int searchLeft() {
+        return searchLeft;
+    }
+
+    int searchWidth() {
+        return SEARCH_WIDTH - (searchLeft - left);
+    }
+
+    int top() {
+        return top;
+    }
+
+    /** The resolution chips only, in toolbar order. */
+    List<ChipButton> resolutionChips() {
+        return chips;
+    }
+
+    ChipButton previewsToggle() {
+        return previewsToggle;
+    }
+
+    /** The color panel while it is on screen (docked, or the popup while open), else null. */
+    ColorWheelPanel shownPanel() {
+        return panelShown() ? panel : null;
+    }
+
     /** Recomputes the view when the filter or the source list changed. Cheap when neither did. */
     public void refresh() {
         boolean colorOn = panel != null && ColorWheelPanel.hasPick();

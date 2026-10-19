@@ -3,10 +3,12 @@ package io.github.as9pa.packorganizer.mixin;
 import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.Settings;
 import io.github.as9pa.packorganizer.gui.FilteredList;
+import io.github.as9pa.packorganizer.gui.McbridgeWidgets;
 import io.github.as9pa.packorganizer.gui.PacksToolbar;
 import io.github.as9pa.packorganizer.gui.PlayerPreviewPanel;
 import io.github.as9pa.packorganizer.gui.PreviewCache;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiResourcePackAvailable;
@@ -212,5 +214,23 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         if (packorganizer$playerPreview != null) {
             packorganizer$playerPreview.tick();
         }
+    }
+
+    /**
+     * For the mcbridge automation mod, which finds this by reflection under this exact name (so not @Unique): one
+     * map per packorganizer widget on the screen, see {@link McbridgeWidgets}. Empty before the first initGui.
+     */
+    public List<?> mcbridgeDescribe() {
+        List<Object> out = new ArrayList<>();
+        if (packorganizer$toolbar != null) {
+            McbridgeWidgets.describeToolbar(packorganizer$toolbar, out);
+        }
+        // The player preview's widgets go here, after the toolbar's.
+        return out;
+    }
+
+    /** For mcbridge, by reflection like {@link #mcbridgeDescribe()}: true when no preview is loading. */
+    public boolean mcbridgeIdle() {
+        return PreviewCache.idle();
     }
 }

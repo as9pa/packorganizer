@@ -39,6 +39,8 @@ public final class PreviewCache {
     private static final LoadQueue<Slot> QUEUE = new LoadQueue<>(STALE_MS);
     /** Started by the first request; client thread only. */
     private static Thread loader;
+    /** True while the loader builds a taken slot; guarded by LOCK. */
+    private static boolean loading;
 
     /** Access-ordered so the first entry is the least recently hovered. */
     private static final LinkedHashMap<File, Slot> CACHE = new LinkedHashMap<>(16, 0.75f, true);
@@ -117,6 +119,16 @@ public final class PreviewCache {
         CACHE.clear();
     }
 
+    /**
+     * True when no load is queued or in flight. A finished atlas still waits for its row's next {@link #get} to
+     * upload it, so callers that need the pixels on screen should also let a frame pass. Any thread.
+     */
+    public static boolean idle() {
+        synchronized (LOCK) {
+            return QUEUE.isEmpty() && !loading;
+        }
+    }
+
     /** Queues the slot, or renews its request, unless the loader has taken it meanwhile. */
     private static void request(Slot slot) {
         if (loader == null) {
@@ -142,12 +154,17 @@ public final class PreviewCache {
                         LOCK.wait();
                     }
                     slot.taken = true;
+                    loading = true;
                 }
                 try {
                     load(slot.pack, slot.defaultPack, slot);
                 } catch (Error e) {
                     // Keep the one loader alive for the next pack.
                     Log.LOG.debug("packorganizer: preview build failed for {}: {}", slot.pack.getName(), e.toString());
+                } finally {
+                    synchronized (LOCK) {
+                        loading = false;
+                    }
                 }
             }
         } catch (InterruptedException e) {

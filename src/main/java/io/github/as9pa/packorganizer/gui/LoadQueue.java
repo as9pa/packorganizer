@@ -56,4 +56,8 @@ final class LoadQueue<T> {
     int size() {
         return order.size();
     }
+
+    boolean isEmpty() {
+        return order.isEmpty();
+    }
 }

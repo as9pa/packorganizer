@@ -63,6 +63,10 @@ public final class ColorWheelPanel {
         return y;
     }
 
+    GuiButton clearButton() {
+        return clearButton;
+    }
+
     public static boolean hasPick() {
         return picked;
     }
