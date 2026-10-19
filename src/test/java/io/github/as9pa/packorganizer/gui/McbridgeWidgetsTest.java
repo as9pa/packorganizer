@@ -29,6 +29,18 @@ public class McbridgeWidgetsTest {
     }
 
     @Test
+    public void toPixelsScalesEveryBoxByTheGuiScale() {
+        McbridgeWidgets.add(out, "search", McbridgeWidgets.TEXT, 10, 28, 140, 20).label("Search packs");
+        McbridgeWidgets.toPixels(out, 2);
+        Map<?, ?> widget = (Map<?, ?>) out.get(0);
+        assertEquals(20, widget.get("x"));
+        assertEquals(56, widget.get("y"));
+        assertEquals(280, widget.get("w"));
+        assertEquals(40, widget.get("h"));
+        assertEquals("Search packs", widget.get("label"));
+    }
+
+    @Test
     public void optionalKeysChainAndKeepTheirTypes() {
         Map<String, Object> widget = McbridgeWidgets.add(out, "colorwheel:clear", McbridgeWidgets.BUTTON, 0, 0, 40, 20)
                 .label("Clear").enabled(true).hovered(false).selected(true).checked(false).value(3).parent("colorwheel");

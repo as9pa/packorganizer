@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiResourcePackSelected;
 import net.minecraft.client.gui.GuiResourcePackSelected;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiScreenResourcePacks;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.resources.ResourcePackListEntry;
 import org.lwjgl.input.Keyboard;
 import org.spongepowered.asm.mixin.Mixin;
@@ -228,6 +229,7 @@ public abstract class MixinGuiScreenResourcePacks extends GuiScreen {
         if (packorganizer$playerPreview != null) {
             packorganizer$playerPreview.describeInto(out);
         }
+        McbridgeWidgets.toPixels(out, new ScaledResolution(mc).getScaleFactor());
         return out;
     }
 

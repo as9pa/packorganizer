@@ -72,6 +72,20 @@ public final class McbridgeWidgets {
         }
     }
 
+    /**
+     * Turns the GUI-pixel boxes in out into framebuffer pixels, the space mcbridge reads describe bounds in.
+     */
+    public static void toPixels(List<Object> out, int scale) {
+        for (Object o : out) {
+            if (o instanceof Widget) {
+                Widget widget = (Widget) o;
+                for (String key : new String[] {"x", "y", "w", "h"}) {
+                    widget.put(key, ((Number) widget.get(key)).intValue() * scale);
+                }
+            }
+        }
+    }
+
     /** Adds a widget to out and returns it for the optional keys. */
     public static Widget add(List<Object> out, String id, String kind, int x, int y, int w, int h) {
         Widget widget = new Widget(id, kind, x, y, w, h);
