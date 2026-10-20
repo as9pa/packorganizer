@@ -283,4 +283,51 @@ public class SettingsTest {
                 s.previewEnchanted, s.listPreviews
         };
     }
+
+    @Test
+    public void favoritesRoundTrip() {
+        Settings s = new Settings();
+        s.toggleFavorite("top.zip");
+        s.toggleFavorite("pvp/16x/Pack.zip");
+        s.toggleFavorite("gone.zip");
+        s.toggleFavorite("gone.zip");
+        assertTrue(s.isFavorite("pvp/16x/Pack.zip"));
+        assertFalse(s.isFavorite("gone.zip"));
+        s.save(json());
+
+        Settings r = Settings.load(json());
+        assertEquals(Arrays.asList("top.zip", "pvp/16x/Pack.zip"), new ArrayList<>(r.favorites));
+        assertTrue(r.isFavorite("top.zip"));
+        assertFalse(r.isFavorite("Pack.zip"));
+        assertFalse(r.isFavorite(null));
+    }
+
+    @Test
+    public void toggleBumpsRevisionAndIgnoresNoPack() {
+        Settings s = new Settings();
+        int start = s.favoritesRevision();
+        s.toggleFavorite(null);
+        s.toggleFavorite("");
+        assertEquals(start, s.favoritesRevision());
+        assertTrue(s.favorites.isEmpty());
+        s.toggleFavorite("a.zip");
+        assertTrue(s.favoritesRevision() != start);
+    }
+
+    @Test
+    public void oldFileWithoutFavoritesMeansNone() throws IOException {
+        writeJson("{\"packPreviews\": false, \"openFolders\": [\"pvp\"]}");
+        Settings s = Settings.load(json());
+        assertFalse(s.packPreviews);
+        assertTrue(s.favorites.isEmpty());
+        assertFalse(s.isFavorite("pvp/x.zip"));
+    }
+
+    @Test
+    public void badFavoriteElementsCostOnlyThemselves() throws IOException {
+        writeJson("{\"favorites\": [\"a.zip\", 3, null, \"\", {\"x\": 1}, \"f/b.zip\"]}");
+        assertEquals(Arrays.asList("a.zip", "f/b.zip"), new ArrayList<>(Settings.load(json()).favorites));
+        writeJson("{\"favorites\": \"a.zip\"}");
+        assertTrue(Settings.load(json()).favorites.isEmpty());
+    }
 }

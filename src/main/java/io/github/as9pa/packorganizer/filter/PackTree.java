@@ -15,18 +15,27 @@ import java.util.Set;
 public final class PackTree {
     private PackTree() {}
 
-    /** One pack as the list sees it; {@code visible} is false when the active filters hide it. */
+    /**
+     * One pack as the list sees it; {@code visible} is false when the active filters hide it. A
+     * {@code favorite} pack is listed first in its own folder, above that folder's subfolders.
+     */
     public static final class Item {
         public final String relPath;
         public final boolean visible;
         public final double sortKey;
         public final boolean selected;
+        public final boolean favorite;
 
         public Item(String relPath, boolean visible, double sortKey, boolean selected) {
+            this(relPath, visible, sortKey, selected, false);
+        }
+
+        public Item(String relPath, boolean visible, double sortKey, boolean selected, boolean favorite) {
             this.relPath = relPath;
             this.visible = visible;
             this.sortKey = sortKey;
             this.selected = selected;
+            this.favorite = favorite;
         }
     }
 
@@ -92,7 +101,7 @@ public final class PackTree {
     /**
      * Lays out the rows. A folder is open when {@code openFolders} holds its path. Folders with no
      * visible pack beneath are left out. With {@code sortByKey} the packs in each folder go by sortKey
-     * descending, else in source order.
+     * descending, else in source order. Favorite packs come first in each folder, before its subfolders.
      */
     public static List<Row> build(List<Item> items, Set<String> openFolders, boolean sortByKey) {
         Node root = new Node("", "");
@@ -132,6 +141,23 @@ public final class PackTree {
 
     private static void emit(Node node, int depth, final List<Item> items, Set<String> openFolders, boolean sortByKey,
             List<Row> rows) {
+        List<Integer> packs = new ArrayList<Integer>(node.packs);
+        if (sortByKey) {
+            // Stable, so equal keys keep source order.
+            Collections.sort(packs, new Comparator<Integer>() {
+                @Override
+                public int compare(Integer a, Integer b) {
+                    return Double.compare(items.get(b).sortKey, items.get(a).sortKey);
+                }
+            });
+        }
+        // Favorites lead the level, above its subfolders; the rest keep their place after the subfolders.
+        for (Integer index : packs) {
+            Item item = items.get(index);
+            if (item.visible && item.favorite) {
+                rows.add(new Pack(index, depth));
+            }
+        }
         List<Node> folders = new ArrayList<Node>(node.folders.values());
         Collections.sort(folders, FOLDER_ORDER);
         for (Node folder : folders) {
@@ -144,21 +170,31 @@ public final class PackTree {
                 emit(folder, depth + 1, items, openFolders, sortByKey, rows);
             }
         }
-        List<Integer> packs = new ArrayList<Integer>(node.packs);
-        if (sortByKey) {
-            // Stable, so equal keys keep source order.
-            Collections.sort(packs, new Comparator<Integer>() {
-                @Override
-                public int compare(Integer a, Integer b) {
-                    return Double.compare(items.get(b).sortKey, items.get(a).sortKey);
-                }
-            });
-        }
         for (Integer index : packs) {
-            if (items.get(index).visible) {
+            Item item = items.get(index);
+            if (item.visible && !item.favorite) {
                 rows.add(new Pack(index, depth));
             }
         }
+    }
+
+    /**
+     * The flat list's order: the indices {@code favorite} marks first, then the rest, each group keeping
+     * its order in {@code order}. {@code favorite} is indexed by the values in {@code order}.
+     */
+    public static List<Integer> favoritesFirst(List<Integer> order, boolean[] favorite) {
+        List<Integer> out = new ArrayList<Integer>(order.size());
+        for (Integer i : order) {
+            if (favorite[i]) {
+                out.add(i);
+            }
+        }
+        for (Integer i : order) {
+            if (!favorite[i]) {
+                out.add(i);
+            }
+        }
+        return out;
     }
 
     private static String trimSlashes(String path) {

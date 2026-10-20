@@ -150,4 +150,55 @@ public class PackTreeTest {
         assertTrue(build(new ArrayList<PackTree.Item>(), open()).isEmpty());
         assertFalse(build(Arrays.asList(item("x.zip")), open()).isEmpty());
     }
+
+    private static PackTree.Item fav(String path) {
+        return new PackTree.Item(path, true, 0, false, true);
+    }
+
+    @Test
+    public void favoriteComesAboveSubfolders() {
+        List<PackTree.Item> items = Arrays.asList(item("a/x.zip"), item("b.zip"), fav("c.zip"), item("d.zip"));
+        assertEquals(Arrays.asList("P:2:0", "F:a:0:1:0:c", "P:1:0", "P:3:0"), describe(build(items, open())));
+    }
+
+    @Test
+    public void favoritesKeepTheirRelativeOrder() {
+        List<PackTree.Item> items = Arrays.asList(fav("z.zip"), item("m.zip"), fav("a.zip"), item("f/x.zip"));
+        assertEquals(Arrays.asList("P:0:0", "P:2:0", "F:f:0:1:0:c", "P:1:0"), describe(build(items, open())));
+    }
+
+    @Test
+    public void nestedFavoriteStaysInItsOwnFolder() {
+        List<PackTree.Item> items = Arrays.asList(item("a/one.zip"), item("a/b/deep.zip"), fav("a/two.zip"), item("top.zip"));
+        // Leads folder a, above a/b, but never rises to the top level.
+        assertEquals(Arrays.asList("F:a:0:3:0:o", "P:2:1", "F:a/b:1:1:0:c", "P:0:1", "P:3:0"),
+                describe(build(items, open("a"))));
+        // A closed folder hides its favorite like any other pack.
+        assertEquals(Arrays.asList("F:a:0:3:0:c", "P:3:0"), describe(build(items, open())));
+    }
+
+    @Test
+    public void hiddenFavoriteIsNotShown() {
+        List<PackTree.Item> items = Arrays.asList(new PackTree.Item("x.zip", false, 0, false, true), item("y.zip"));
+        assertEquals(Arrays.asList("P:1:0"), describe(build(items, open())));
+    }
+
+    @Test
+    public void noFavoritesLeavesOrderUnchanged() {
+        List<PackTree.Item> plain = Arrays.asList(item("b.zip"), item("a/x.zip"), item("c.zip"), item("a/b/y.zip"));
+        List<PackTree.Item> flagged = Arrays.asList(new PackTree.Item("b.zip", true, 0, false, false),
+                new PackTree.Item("a/x.zip", true, 0, false, false), new PackTree.Item("c.zip", true, 0, false, false),
+                new PackTree.Item("a/b/y.zip", true, 0, false, false));
+        assertEquals(Arrays.asList("F:a:0:2:0:o", "F:a/b:1:1:0:o", "P:3:2", "P:1:1", "P:0:0", "P:2:0"),
+                describe(build(plain, open("a", "a/b"))));
+        assertEquals(describe(build(plain, open("a", "a/b"))), describe(build(flagged, open("a", "a/b"))));
+    }
+
+    @Test
+    public void favoritesFirstInTheFlatList() {
+        boolean[] favorite = {false, true, false, true, false};
+        assertEquals(Arrays.asList(3, 1, 4, 0, 2), PackTree.favoritesFirst(Arrays.asList(4, 3, 0, 1, 2), favorite));
+        assertEquals(Arrays.asList(0, 2, 4), PackTree.favoritesFirst(Arrays.asList(0, 2, 4), favorite));
+        assertTrue(PackTree.favoritesFirst(new ArrayList<Integer>(), favorite).isEmpty());
+    }
 }

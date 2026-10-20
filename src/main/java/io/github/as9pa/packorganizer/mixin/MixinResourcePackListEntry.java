@@ -3,6 +3,7 @@ package io.github.as9pa.packorganizer.mixin;
 import io.github.as9pa.packorganizer.EntryExtension;
 import io.github.as9pa.packorganizer.PackOrganizer;
 import io.github.as9pa.packorganizer.filter.PreviewSpec;
+import io.github.as9pa.packorganizer.gui.FavoriteStar;
 import io.github.as9pa.packorganizer.gui.PacksToolbar;
 import io.github.as9pa.packorganizer.gui.PlayerPreviewPanel;
 import io.github.as9pa.packorganizer.gui.PreviewCache;
@@ -36,7 +37,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * trim so the badge and indent never overlap the text. While a Found row is hovered and its preview is
  * ready, the name and description give way to a 2x8 grid of the pack's textures. In Previews mode
  * (listPreviews) every on-screen Found row shows its grid instead, and the hovered row its text; a grid row keeps
- * its badge only where the badge clears the grid. See {@link RowLook}.
+ * its badge only where the badge clears the grid. See {@link RowLook}. Favorites get a gold star left of the badge,
+ * and the hovered pack row an outline star; clicking either toggles the favorite. See {@link FavoriteStar}.
  */
 @Mixin(ResourcePackListEntry.class)
 public abstract class MixinResourcePackListEntry implements RowLayout {
@@ -56,6 +58,13 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     @Unique private PreviewCache.Preview packorganizer$preview;
     /** Set at drawEntry HEAD with the preview: true when the row's look drops the badge. */
     @Unique private boolean packorganizer$hideBadge;
+    /** Set at drawEntry HEAD: the row's favorite key (null for no pack) and whether a star shows this frame. */
+    @Unique private String packorganizer$starKey;
+    @Unique private boolean packorganizer$starFavorite;
+    @Unique private boolean packorganizer$starShown;
+    /** Where the star was last drawn, relative to the unindented x, for the click test; starDrawn false if not. */
+    @Unique private boolean packorganizer$starDrawn;
+    @Unique private int packorganizer$starLeft;
 
     @Override
     public void packorganizer$setDepth(int depth) {
@@ -85,13 +94,16 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     /**
      * drawEntry uses the literal 157 three times: twice for the name ("if (width > 157)" and
      * "trimStringToWidth(s, 157 - ...)"), once for the description. The name makes room for the
-     * badge (when shown) and the indent; the description makes room for the indent only.
+     * badge (when shown), the star (when shown) and the indent; the description makes room for the indent only.
      */
     @ModifyConstant(method = "drawEntry",
             constant = {@Constant(intValue = 157, ordinal = 0), @Constant(intValue = 157, ordinal = 1)},
             require = 2)
     private int packorganizer$nameWidth(int vanillaWidth) {
         int width = PackOrganizer.settings().resolutionLabels ? RowBadge.NAME_WIDTH : vanillaWidth;
+        if (packorganizer$starShown) {
+            width -= FavoriteStar.NAME_ROOM;
+        }
         return width - packorganizer$indentPx();
     }
 
@@ -110,6 +122,9 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
                                              int mouseX, int mouseY, boolean isSelected, CallbackInfo ci) {
         packorganizer$preview = null;
         packorganizer$hideBadge = false;
+        packorganizer$starKey = PacksToolbar.favoriteKey((ResourcePackListEntry) (Object) this);
+        packorganizer$starFavorite = PackOrganizer.settings().isFavorite(packorganizer$starKey);
+        packorganizer$starShown = packorganizer$starKey != null && (packorganizer$starFavorite || isSelected);
         if (isSelected) {
             packorganizer$offerHover();
         }
@@ -155,7 +170,7 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
 
     /**
      * x here is the shifted x, so step back by the indent to draw the guides from the original x
-     * and keep the badge right-aligned.
+     * and keep the badge and star right-aligned.
      */
     @Inject(method = "drawEntry", at = @At("RETURN"))
     private void packorganizer$drawGuidesAndBadge(int slotIndex, int x, int y, int listWidth, int slotHeight,
@@ -172,21 +187,62 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         int stripRight = preview != null
                 ? packorganizer$drawPreview(preview, x, y, originalX + listWidth, slotHeight)
                 : Integer.MIN_VALUE;
-        if (hideBadge || !PackOrganizer.settings().resolutionLabels) {
+        int badgeWidth = packorganizer$drawBadge(preview != null, hideBadge, stripRight, originalX, y);
+        packorganizer$starDrawn = false;
+        if (!packorganizer$starShown) {
             return;
+        }
+        int starLeft = FavoriteStar.left(RowBadge.RIGHT_EDGE, badgeWidth);
+        // Like the badge, a strip row keeps its star only where the star clears the strip.
+        if (preview != null && !RowLook.labelFits(stripRight, originalX + starLeft + FavoriteStar.SIZE,
+                FavoriteStar.SIZE)) {
+            return;
+        }
+        packorganizer$drawStar(originalX + starLeft, y + FavoriteStar.TOP, packorganizer$starFavorite);
+        packorganizer$starLeft = starLeft;
+        packorganizer$starDrawn = true;
+    }
+
+    /** Draws the resolution badge right-aligned on the name line; returns its width, 0 when not drawn. */
+    @Unique
+    private int packorganizer$drawBadge(boolean strip, boolean hideBadge, int stripRight, int originalX, int y) {
+        if (hideBadge || !PackOrganizer.settings().resolutionLabels) {
+            return 0;
         }
         String badge = RowBadge.text((ResourcePackListEntry) (Object) this);
         if (badge.isEmpty()) {
-            return;
+            return 0;
         }
         FontRenderer font = mc.fontRendererObj;
         int right = originalX + RowBadge.RIGHT_EDGE;
         int width = font.getStringWidth(badge);
         // A strip row keeps its badge only where the badge clears the strip; indents push the strip into it.
-        if (preview != null && !RowLook.labelFits(stripRight, right, width)) {
-            return;
+        if (strip && !RowLook.labelFits(stripRight, right, width)) {
+            return 0;
         }
         font.drawStringWithShadow(badge, right - width, y + 1, RowBadge.COLOUR);
+        return width;
+    }
+
+    /** Gold with a 1 px shadow for a favorite, else the grey outline (edge pixels only). */
+    @Unique
+    private static void packorganizer$drawStar(int left, int top, boolean favorite) {
+        for (int py = 0; py < FavoriteStar.SIZE; py++) {
+            for (int px = 0; px < FavoriteStar.SIZE; px++) {
+                if (favorite && FavoriteStar.filled(px, py)) {
+                    Gui.drawRect(left + px + 1, top + py + 1, left + px + 2, top + py + 2, FavoriteStar.SHADOW);
+                }
+            }
+        }
+        for (int py = 0; py < FavoriteStar.SIZE; py++) {
+            for (int px = 0; px < FavoriteStar.SIZE; px++) {
+                if (favorite ? FavoriteStar.filled(px, py) : FavoriteStar.edge(px, py)) {
+                    Gui.drawRect(left + px, top + py, left + px + 1, top + py + 1,
+                            favorite ? FavoriteStar.GOLD : FavoriteStar.OUTLINE);
+                }
+            }
+        }
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     /**
@@ -216,6 +272,20 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
         GlStateManager.disableBlend();
         return left + PreviewSpec.COLUMNS * cell;
+    }
+
+    /**
+     * A click on the star (as last drawn) toggles the favorite and is consumed: returning true stops vanilla's
+     * icon-arrow handling, and the list does not select or move the pack. Declared before the relativeX shift so it
+     * sees the unshifted relativeX the star was placed by.
+     */
+    @Inject(method = "mousePressed", at = @At("HEAD"), cancellable = true)
+    private void packorganizer$clickStar(int slotIndex, int mouseX, int mouseY, int mouseEvent,
+                                         int relativeX, int relativeY, CallbackInfoReturnable<Boolean> cir) {
+        if (packorganizer$starDrawn && FavoriteStar.hit(relativeX, relativeY, packorganizer$starLeft)) {
+            PackOrganizer.settings().toggleFavorite(packorganizer$starKey);
+            cir.setReturnValue(true);
+        }
     }
 
     /**

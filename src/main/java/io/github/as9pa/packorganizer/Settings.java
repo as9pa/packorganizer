@@ -53,6 +53,10 @@ public final class Settings {
     public boolean previewEnchanted = false;
     /** Pack list rows show item previews. Set by the toolbar's Previews toggle; not on the settings screen. */
     public boolean listPreviews = false;
+    /** Starred packs, keyed by path relative to resourcepacks with "/" separators (nested packs included). */
+    public Set<String> favorites = new LinkedHashSet<>();
+    /** Bumped on every favorite toggle, so the pack list can tell its order is stale. Not saved. */
+    private int favoritesRevision;
 
     public static final List<String> ARMORS = Collections.unmodifiableList(Arrays.asList(
             "leather", "chainmail", "iron", "gold", "diamond"));
@@ -94,6 +98,31 @@ public final class Settings {
             new Switch("Show cape", s -> s.showCape, (s, v) -> s.showCape = v),
             new Switch("Hit tint", s -> s.previewHitTint, (s, v) -> s.previewHitTint = v),
             new Switch("Preview sounds", s -> s.previewSounds, (s, v) -> s.previewSounds = v)));
+
+    public boolean isFavorite(String key) {
+        return key != null && favorites.contains(key);
+    }
+
+    /** Stars or unstars the pack, then saves when these are the loaded settings. Null or "" (no pack) is ignored. */
+    public void toggleFavorite(String key) {
+        if (key == null || key.isEmpty()) {
+            return;
+        }
+        if (!favorites.remove(key)) {
+            favorites.add(key);
+        }
+        favoritesRevision++;
+        synchronized (Settings.class) {
+            if (this == current) {
+                saveNow();
+            }
+        }
+    }
+
+    /** Changes whenever {@link #toggleFavorite} does; compare against a stored value to detect a toggle. */
+    public int favoritesRevision() {
+        return favoritesRevision;
+    }
 
     private static Settings current;
     private static File currentFile;
@@ -160,6 +189,15 @@ public final class Settings {
         s.showCape = bool(root, "showCape", s.showCape);
         s.previewEnchanted = bool(root, "previewEnchanted", s.previewEnchanted);
         s.listPreviews = bool(root, "listPreviews", s.listPreviews);
+        JsonElement favorites = root.get("favorites");
+        if (favorites != null && favorites.isJsonArray()) {
+            for (JsonElement e : favorites.getAsJsonArray()) {
+                // One bad element must cost only itself.
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString() && !e.getAsString().isEmpty()) {
+                    s.favorites.add(e.getAsString());
+                }
+            }
+        }
         return s;
     }
 
@@ -187,6 +225,11 @@ public final class Settings {
         root.addProperty("showCape", showCape);
         root.addProperty("previewEnchanted", previewEnchanted);
         root.addProperty("listPreviews", listPreviews);
+        JsonArray favs = new JsonArray();
+        for (String f : favorites) {
+            favs.add(new JsonPrimitive(f));
+        }
+        root.add("favorites", favs);
 
         File tmp = new File(file.getPath() + ".tmp");
         try {

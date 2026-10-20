@@ -91,6 +91,8 @@ public final class PacksToolbar {
     private String query;
     private int matchCount;
     private boolean dirty = true;
+    /** The favorites revision the view was last built for; a star toggle changes it and forces a rebuild. */
+    private int appliedFavorites = -1;
 
     /** {@code selected} is read only for the folder rows' counts; its rows are never shown here. */
     public PacksToolbar(GuiScreenResourcePacks screen, FontRenderer font, int left, int top,
@@ -198,10 +200,13 @@ public final class PacksToolbar {
     public void refresh() {
         boolean colorOn = panel != null && ColorWheelPanel.hasPick();
         PackColors defaults = colorOn ? DefaultColors.get() : null;
-        if (!dirty && colorOn == colorApplied && defaults == appliedDefaults && sameAsSnapshot()) {
+        Settings settings = PackOrganizer.settings();
+        if (!dirty && colorOn == colorApplied && defaults == appliedDefaults
+                && appliedFavorites == settings.favoritesRevision() && sameAsSnapshot()) {
             return;
         }
         dirty = false;
+        appliedFavorites = settings.favoritesRevision();
         colorApplied = colorOn;
         appliedDefaults = defaults;
         snapshot.clear();
@@ -213,6 +218,7 @@ public final class PacksToolbar {
         matchCount = 0;
         PackFilter.Chip chip = PackFilter.activeChip();
         boolean[] matched = new boolean[source.size()];
+        boolean[] favorite = new boolean[source.size()];
         for (int i = 0; i < source.size(); i++) {
             ResourcePackListEntry entry = source.get(i);
             // Record the resolution and colors before matching: a scan landing in between then leaves the
@@ -221,6 +227,7 @@ public final class PacksToolbar {
             snapshotResolutions.add(resolutionOf(entry));
             snapshotColors.add(colorsOf(entry));
             matched[i] = matches(chip, entry);
+            favorite[i] = settings.isFavorite(favoriteKey(entry));
         }
         double[] scores = colorOn ? applyColor(matched, defaults) : null;
         for (boolean m : matched) {
@@ -231,7 +238,7 @@ public final class PacksToolbar {
         // Any active filter shows the matches as one flat list, packs inside folders included; the folder
         // tree (with its saved open state) comes back once every filter is cleared.
         boolean filtering = !query.isEmpty() || chip != PackFilter.Chip.ALL || scores != null;
-        if (!PackOrganizer.settings().packFolders || filtering) {
+        if (!settings.packFolders || filtering) {
             List<Integer> order = new ArrayList<>();
             for (int i = 0; i < source.size(); i++) {
                 setDepth(source.get(i), 0);
@@ -243,12 +250,12 @@ public final class PacksToolbar {
                 // Stable, so equal scores keep source order.
                 Collections.sort(order, (a, b) -> Double.compare(scores[b], scores[a]));
             }
-            for (int i : order) {
+            for (int i : PackTree.favoritesFirst(order, favorite)) {
                 visible.add(source.get(i));
             }
             return;
         }
-        buildTree(matched);
+        buildTree(matched, favorite);
     }
 
     /**
@@ -280,10 +287,10 @@ public final class PacksToolbar {
     }
 
     /** Lays the packs out under their folders, used only while no filter is active. Selected packs count toward folder totals only. */
-    private void buildTree(boolean[] matched) {
+    private void buildTree(boolean[] matched, boolean[] favorite) {
         List<PackTree.Item> items = new ArrayList<>(source.size() + selected.size());
         for (int i = 0; i < source.size(); i++) {
-            items.add(new PackTree.Item(relPathOf(source.get(i)), matched[i], 0, false));
+            items.add(new PackTree.Item(relPathOf(source.get(i)), matched[i], 0, false, favorite[i]));
         }
         for (ResourcePackListEntry entry : selected) {
             items.add(new PackTree.Item(relPathOf(entry), false, 0, true));
@@ -333,6 +340,15 @@ public final class PacksToolbar {
             return "";
         }
         return ((ResourcePackListEntryFound) entry).func_148318_i().getResourcePackName();
+    }
+
+    /**
+     * The key {@link Settings#isFavorite} and {@link Settings#toggleFavorite} take for this row: the pack's
+     * path relative to resourcepacks. Null for rows that are not a pack on disk (the default pack).
+     */
+    public static String favoriteKey(ResourcePackListEntry entry) {
+        String rel = relPathOf(entry);
+        return rel.isEmpty() ? null : rel;
     }
 
     private boolean sameAsSnapshot() {
