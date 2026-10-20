@@ -37,8 +37,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * trim so the badge and indent never overlap the text. While a Found row is hovered and its preview is
  * ready, the name and description give way to a 2x8 grid of the pack's textures. In Previews mode
  * (listPreviews) every on-screen Found row shows its grid instead, and the hovered row its text; a grid row keeps
- * its badge only where the badge clears the grid. See {@link RowLook}. Favorites get a gold star left of the badge,
- * and the hovered pack row an outline star; clicking either toggles the favorite. See {@link FavoriteStar}.
+ * its badge only where the badge clears the grid. See {@link RowLook}. Favorites get a gold star left of the badge
+ * (under it on a grid row), and the hovered pack row an outline star; clicking either toggles the favorite. See
+ * {@link FavoriteStar}.
  */
 @Mixin(ResourcePackListEntry.class)
 public abstract class MixinResourcePackListEntry implements RowLayout {
@@ -62,9 +63,10 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     @Unique private String packorganizer$starKey;
     @Unique private boolean packorganizer$starFavorite;
     @Unique private boolean packorganizer$starShown;
-    /** Where the star was last drawn, relative to the unindented x, for the click test; starDrawn false if not. */
+    /** Where the star was last drawn, relative to the unindented row, for the click test; starDrawn false if not. */
     @Unique private boolean packorganizer$starDrawn;
     @Unique private int packorganizer$starLeft;
+    @Unique private int packorganizer$starTop;
 
     @Override
     public void packorganizer$setDepth(int depth) {
@@ -192,14 +194,16 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
         if (!packorganizer$starShown) {
             return;
         }
-        int starLeft = FavoriteStar.left(RowBadge.RIGHT_EDGE, badgeWidth);
+        int starLeft = FavoriteStar.left(RowBadge.RIGHT_EDGE, badgeWidth, preview != null);
+        int starTop = FavoriteStar.top(preview != null);
         // Like the badge, a strip row keeps its star only where the star clears the strip.
         if (preview != null && !RowLook.labelFits(stripRight, originalX + starLeft + FavoriteStar.SIZE,
                 FavoriteStar.SIZE)) {
             return;
         }
-        packorganizer$drawStar(originalX + starLeft, y + FavoriteStar.TOP, packorganizer$starFavorite);
+        packorganizer$drawStar(originalX + starLeft, y + starTop, packorganizer$starFavorite);
         packorganizer$starLeft = starLeft;
+        packorganizer$starTop = starTop;
         packorganizer$starDrawn = true;
     }
 
@@ -282,7 +286,8 @@ public abstract class MixinResourcePackListEntry implements RowLayout {
     @Inject(method = "mousePressed", at = @At("HEAD"), cancellable = true)
     private void packorganizer$clickStar(int slotIndex, int mouseX, int mouseY, int mouseEvent,
                                          int relativeX, int relativeY, CallbackInfoReturnable<Boolean> cir) {
-        if (packorganizer$starDrawn && FavoriteStar.hit(relativeX, relativeY, packorganizer$starLeft)) {
+        if (packorganizer$starDrawn && FavoriteStar.hit(relativeX, relativeY, packorganizer$starLeft,
+                packorganizer$starTop)) {
             PackOrganizer.settings().toggleFavorite(packorganizer$starKey);
             cir.setReturnValue(true);
         }

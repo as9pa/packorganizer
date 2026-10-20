@@ -2,7 +2,8 @@ package io.github.as9pa.packorganizer.gui;
 
 /**
  * The 7x7 favorite star on a pack row's name line, just left of the resolution badge: gold with a text-style
- * shadow on favorites, a grey outline on the hovered row otherwise. Pure geometry and hit test; the drawing and
+ * shadow on favorites, a grey outline on the hovered row otherwise. A row showing its preview strip puts the star
+ * under the badge instead, since the strip runs up to the badge. Pure geometry and hit test; the drawing and
  * the click live in MixinResourcePackListEntry. All x values are relative to the row's unindented x.
  */
 public final class FavoriteStar {
@@ -13,6 +14,8 @@ public final class FavoriteStar {
     public static final int PAD = 2;
     /** Star top, relative to the row's y: the name line's text top. */
     public static final int TOP = 1;
+    /** Star top on a strip row, relative to the row's y: the description line's text top, under the badge. */
+    public static final int STRIP_TOP = 12;
     /** How much earlier the name is trimmed while the star shows. */
     public static final int NAME_ROOM = 10;
 
@@ -52,9 +55,22 @@ public final class FavoriteStar {
         return badgeWidth > 0 ? badgeRight - badgeWidth - GAP - SIZE : badgeRight - SIZE;
     }
 
-    /** Whether a click at (relX, relY) in row coordinates lands on the star at starLeft, padding included. */
-    public static boolean hit(int relX, int relY, int starLeft) {
+    /**
+     * Star left edge on a row with or without the preview strip. Beside the badge the star would overlap the 16 px
+     * strip (which ends at 162), so a strip row sets it flush right under the badge, at {@link #STRIP_TOP}.
+     */
+    public static int left(int badgeRight, int badgeWidth, boolean strip) {
+        return left(badgeRight, strip ? 0 : badgeWidth);
+    }
+
+    /** Star top, relative to the row's y: {@link #STRIP_TOP} on a strip row, else {@link #TOP}. */
+    public static int top(boolean strip) {
+        return strip ? STRIP_TOP : TOP;
+    }
+
+    /** Whether a click at (relX, relY) in row coordinates lands on the star at starLeft, starTop, padding included. */
+    public static boolean hit(int relX, int relY, int starLeft, int starTop) {
         return relX >= starLeft - PAD && relX < starLeft + SIZE + PAD
-                && relY >= TOP - PAD && relY < TOP + SIZE + PAD;
+                && relY >= starTop - PAD && relY < starTop + SIZE + PAD;
     }
 }
