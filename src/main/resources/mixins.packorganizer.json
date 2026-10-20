@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.7",
   "package": "io.github.as9pa.packorganizer.mixin",
+  "plugin": "io.github.as9pa.packorganizer.mixin.PackOrganizerMixinPlugin",
   "refmap": "mixins.packorganizer.refmap.json",
   "compatibilityLevel": "JAVA_8",
   "client": [
@@ -12,7 +13,10 @@
     "MixinGuiScreenResourcePacks",
     "MixinResourcePackListEntry",
     "MixinGuiSlot",
-    "MixinMinecraft"
+    "MixinMinecraft",
+    "fast.MixinFastResourcePackRepositoryEntry",
+    "fast.MixinFastResourcePackRepository",
+    "fast.MixinFastGuiListExtended"
   ],
   "injectors": { "defaultRequire": 1 }
 }
