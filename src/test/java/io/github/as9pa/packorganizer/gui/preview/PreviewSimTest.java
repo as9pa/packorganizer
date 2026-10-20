@@ -230,7 +230,7 @@ public class PreviewSimTest {
     }
 
     @Test
-    public void pearlThrowSoundsThenHurtOnLanding() {
+    public void pearlThrowSoundsThenTeleportsOnLanding() {
         Heard out = new Heard();
         Random r = new Random(SOUND_SEED);
         PreviewSim s = heard(HeldItem.ENDER_PEARL, out);
@@ -239,7 +239,7 @@ public class PreviewSimTest {
         out.assertPlayed(0, PreviewSound.BOW, VanillaSoundRules.THROW_VOLUME, VanillaSoundRules.throwPitch(r));
         untilEmpty(s, 60);
         assertEquals(2, out.events.size());
-        out.assertPlayed(1, PreviewSound.HURT, 1f, VanillaSoundRules.hurtPitch(r));
+        out.assertPlayed(1, PreviewSound.TELEPORT, 1f, 1f);
     }
 
     @Test
@@ -627,7 +627,7 @@ public class PreviewSimTest {
     }
 
     @Test
-    public void pearlLandingBurstsPortalsAndHurts() {
+    public void pearlLandingBurstsPortalsWithoutHurting() {
         PreviewSim s = sim(HeldItem.ENDER_PEARL);
         s.rightPress();
         s.rightRelease();
@@ -639,7 +639,7 @@ public class PreviewSimTest {
         }
         assertTrue(s.world().projectiles().isEmpty());
         assertEquals(32, count(s, ParticleKind.PORTAL));
-        assertEquals(0.3f, s.hurt(0), 0f);
+        assertEquals(0f, s.hurt(0), 0f);
     }
 
     @Test
