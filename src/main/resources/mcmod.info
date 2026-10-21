@@ -1,7 +1,7 @@
 [
   {
     "modid": "${modid}",
-    "name": "Pack Organizer",
+    "name": "packview",
     "description": "Search, filter chips and resolution labels for the resource packs screen.",
     "version": "${version}",
     "mcversion": "${mcversion}",

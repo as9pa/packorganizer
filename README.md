@@ -1,8 +1,8 @@
-# packorganizer
+# packview
 
-A Forge 1.8.9 mod that upgrades the Resource Packs screen: it opens fast, keeps a big pack collection organized, and shows each pack on your own player before you turn it on. It works alone or alongside [fastpacks](https://github.com/as9pa/fastpacks).
+packview (formerly packorganizer) is a Forge 1.8.9 mod that upgrades the Resource Packs screen: it opens fast, keeps a big pack collection organized, and shows each pack on your own player before you turn it on. It works alone or alongside [fastpacks](https://github.com/as9pa/fastpacks).
 
-![The Resource Packs screen with packorganizer](docs/images/screen.png)
+![The Resource Packs screen with packview](docs/images/screen.png)
 
 ## Features
 
@@ -32,12 +32,14 @@ On a narrow window the layout tightens and the color wheel moves into a Color bu
 
 ### Settings
 
-Every feature can be turned off under Mods > Pack Organizer > Config.
+Every feature can be turned off under Mods > packview > Config.
 
 ![The settings screen](docs/images/settings.png)
 
 ## Install
 
-Put `packorganizer-0.4.0.jar` in `.minecraft\mods` and remove any older copy. Works alone or with fastpacks.
+Put the packview jar from the latest release in `.minecraft\mods`. Works alone or with fastpacks.
+
+Coming from packorganizer? Remove the old `packorganizer` jar first, since the two would patch the same screen. Your settings, favorites and pack cache carry over on the first launch.
 
 See [docs/details.md](docs/details.md) for the full feature list and settings.

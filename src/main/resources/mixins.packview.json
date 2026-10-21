@@ -1,0 +1,22 @@
+{
+  "required": true,
+  "minVersion": "0.7",
+  "package": "io.github.as9pa.packview.mixin",
+  "plugin": "io.github.as9pa.packview.mixin.PackViewMixinPlugin",
+  "refmap": "mixins.packview.refmap.json",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "MixinResourcePackRepository",
+    "MixinResourcePackRepositoryEntry",
+    "MixinResourcePackListEntryFound",
+    "MixinGuiResourcePackList",
+    "MixinGuiScreenResourcePacks",
+    "MixinResourcePackListEntry",
+    "MixinGuiSlot",
+    "MixinMinecraft",
+    "fast.MixinFastResourcePackRepositoryEntry",
+    "fast.MixinFastResourcePackRepository",
+    "fast.MixinFastGuiListExtended"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}
