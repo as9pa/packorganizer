@@ -77,7 +77,7 @@ public final class PreviewPhysics {
         this.minY = minY;
     }
 
-    /** Runs when a pearl lands or gives up; the listener emits {@link #portalBurst()} and starts the hurt flash. */
+    /** Runs when a pearl lands or gives up; the listener emits {@link #portalBurst()} and plays the teleport sound. */
     public void setOnPearlLanded(Runnable listener) {
         onPearlLanded = listener;
     }
