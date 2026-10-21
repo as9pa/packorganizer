@@ -1,4 +1,4 @@
-# Pack Organizer details
+# packorganizer details
 
 ## Features in full
 

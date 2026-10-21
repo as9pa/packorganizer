@@ -1,8 +1,8 @@
-# Pack Organizer
+# packorganizer
 
 A Forge 1.8.9 mod that upgrades the Resource Packs screen: it opens fast, keeps a big pack collection organized, and shows each pack on your own player before you turn it on. It works alone or alongside [fastpacks](https://github.com/as9pa/fastpacks).
 
-![The Resource Packs screen with Pack Organizer](docs/images/screen.png)
+![The Resource Packs screen with packorganizer](docs/images/screen.png)
 
 ## Features
 
