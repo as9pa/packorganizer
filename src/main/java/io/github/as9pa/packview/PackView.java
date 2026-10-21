@@ -25,7 +25,28 @@ public class PackView {
      */
     public static Settings settings() {
         // mcDataDir is set in Minecraft's constructor, so it is valid even during startGame.
-        Settings.init(new File(Minecraft.getMinecraft().mcDataDir, "config" + File.separator + MODID));
+        File dataDir = Minecraft.getMinecraft().mcDataDir;
+        File configDir = new File(dataDir, "config" + File.separator + MODID);
+        if (!configMigrated) {
+            migrateConfig(dataDir, configDir);
+        }
+        Settings.init(configDir);
         return Settings.get();
+    }
+
+    private static volatile boolean configMigrated;
+
+    /**
+     * Copies config/packorganizer over before the first settings load. This is also the first thing to touch
+     * config/packview: the repository's getResourcePackFiles mixin asks for settings before any entry queues a scan,
+     * so the scan cache (packs.json) is configured only after this has run.
+     */
+    private static synchronized void migrateConfig(File dataDir, File configDir) {
+        if (configMigrated) {
+            return;
+        }
+        ConfigMigration.migrate(
+                new File(dataDir, "config" + File.separator + ConfigMigration.OLD_MODID).toPath(), configDir.toPath());
+        configMigrated = true;
     }
 }
