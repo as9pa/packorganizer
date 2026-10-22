@@ -24,12 +24,6 @@ Click a color to sort packs by how close their diamond sword and armor are to it
 
 ![Sorting by color](docs/images/color-sort.png)
 
-### Small windows
-
-On a narrow window the layout tightens and the color wheel moves into a Color button popup.
-
-![A small window, with the color wheel in a popup](docs/images/small-window.png)
-
 ### Settings
 
 Every feature can be turned off under Mods > packview > Config.
@@ -39,7 +33,5 @@ Every feature can be turned off under Mods > packview > Config.
 ## Install
 
 Put the packview jar from the latest release in `.minecraft\mods`. Works alone or with fastpacks.
-
-Coming from packorganizer? Remove the old `packorganizer` jar first, since the two would patch the same screen. Your settings, favorites and pack cache carry over on the first launch.
 
 See [docs/details.md](docs/details.md) for the full feature list and settings.
